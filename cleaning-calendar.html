@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>清掃カレンダー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F6F3;
+    --surface: #FFFFFF;
+    --surface2: #F0EEE9;
+    --border: #E2DED7;
+    --text: #1A1916;
+    --text2: #6B6760;
+    --text3: #A09D98;
+    --accent: #2C5F8A;
+    --accent-light: #E8F0F8;
+    --green: #1E7A4F;
+    --green-light: #E6F4ED;
+    --amber: #9A5E10;
+    --amber-light: #FDF0DF;
+    --red: #C0392B;
+    --red-light: #FDECEA;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  .app { max-width: 480px; margin: 0 auto; padding-bottom: 80px; }
+
+  /* Header */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px 12px; position: sticky; top: 0; z-index: 100; }
+  .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .app-title { font-size: 13px; font-weight: 700; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; }
+  .company-name { font-size: 15px; font-weight: 700; color: var(--text); }
+  .api-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); }
+  .api-indicator.live { background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .date-nav { display: flex; align-items: center; justify-content: space-between; }
+  .date-nav-btn { width: 36px; height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; color: var(--text2); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .date-nav-btn:active { background: var(--surface2); }
+  .date-center { text-align: center; }
+  .date-main { font-size: 16px; font-weight: 700; color: var(--text); }
+  .date-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .today-btn { font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: none; color: var(--text2); cursor: pointer; }
+  .today-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* Stats bar */
+  .stats-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 16px; }
+  .stat-card { background: var(--surface); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; border: 1px solid var(--border); }
+  .stat-num { font-size: 24px; font-weight: 700; line-height: 1; }
+  .stat-num.pending { color: var(--amber); }
+  .stat-num.done { color: var(--green); }
+  .stat-num.total { color: var(--accent); }
+  .stat-label { font-size: 10px; color: var(--text3); margin-top: 4px; letter-spacing: 0.05em; }
+
+  /* Section */
+  .section { padding: 0 16px; }
+  .section-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; margin-top: 16px; }
+  .section-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .section-dot.pending { background: var(--amber); }
+  .section-dot.done { background: var(--green); }
+  .section-title-text { font-size: 11px; font-weight: 700; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; }
+  .section-count { font-size: 11px; color: var(--text3); }
+
+  /* Property Card */
+  .prop-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; transition: box-shadow 0.15s; }
+  .prop-card.is-done { border-color: #B8E0CC; background: #FBFEFB; }
+  .prop-card-body { padding: 14px; }
+  .prop-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .prop-card-info { flex: 1; min-width: 0; }
+  .prop-card-name { font-size: 16px; font-weight: 700; color: var(--text); }
+  .prop-card-guest { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .badge { font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.04em; }
+  .badge.checkout { background: var(--amber-light); color: var(--amber); }
+  .badge.checkin { background: var(--accent-light); color: var(--accent); }
+  .badge.both { background: var(--red-light); color: var(--red); }
+  .badge.done { background: var(--green-light); color: var(--green); }
+  .badge.none { background: var(--surface2); color: var(--text3); }
+
+  .prop-details { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .detail-pill { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text2); background: var(--surface2); padding: 4px 8px; border-radius: 6px; }
+  .detail-pill .icon { font-size: 12px; }
+
+  /* Check button */
+  .prop-card-footer { border-top: 1px solid var(--border); display: flex; }
+  .check-btn { flex: 1; padding: 11px 12px; background: none; border: none; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; transition: background 0.1s; }
+  .check-btn:active { background: var(--surface2); }
+  .check-btn.done { color: var(--green); }
+  .check-btn .circle { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
+  .check-btn.done .circle { background: var(--green); border-color: var(--green); }
+  .check-btn.done .circle::after { content: ''; display: block; width: 5px; height: 9px; border: 2px solid white; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px,-1px); }
+  .divider-v { width: 1px; background: var(--border); margin: 8px 0; }
+  .memo-btn { padding: 11px 14px; background: none; border: none; cursor: pointer; font-size: 12px; color: var(--text3); display: flex; align-items: center; gap: 4px; font-family: inherit; white-space: nowrap; }
+  .memo-btn.has-memo { color: var(--accent); }
+  .memo-btn:active { background: var(--surface2); }
+
+  /* Memo area */
+  .memo-area { border-top: 1px solid var(--border); padding: 12px 14px; background: var(--surface2); }
+  .memo-textarea { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); resize: vertical; min-height: 70px; font-family: 'Noto Sans JP', sans-serif; line-height: 1.6; outline: none; }
+  .memo-textarea:focus { border-color: var(--accent); }
+  .memo-saved { font-size: 11px; color: var(--green); margin-top: 6px; text-align: right; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 48px 24px; color: var(--text3); }
+  .empty-icon { font-size: 36px; margin-bottom: 12px; }
+  .empty-text { font-size: 14px; }
+
+  /* Bottom tab bar */
+  .tabbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; max-width: 480px; margin: 0 auto; z-index: 200; }
+  .tab-item { flex: 1; padding: 10px 4px 12px; text-align: center; cursor: pointer; background: none; border: none; font-family: inherit; }
+  .tab-item:active { background: var(--surface2); }
+  .tab-icon { font-size: 20px; line-height: 1; }
+  .tab-label { font-size: 10px; color: var(--text3); margin-top: 3px; letter-spacing: 0.03em; }
+  .tab-item.active .tab-label { color: var(--accent); font-weight: 700; }
+  .tab-item.active .tab-icon { filter: none; }
+
+  /* Calendar view */
+  .calendar-wrap { padding: 16px; }
+  .month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .month-nav-btn { width: 36px; height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; color: var(--text2); font-size: 16px; cursor: pointer; }
+  .month-title { font-size: 16px; font-weight: 700; }
+  .cal-filter { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; }
+  .cal-filter::-webkit-scrollbar { display: none; }
+  .cal-chip { flex-shrink: 0; font-size: 12px; padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text2); cursor: pointer; font-family: inherit; font-weight: 500; }
+  .cal-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal-weekday { text-align: center; font-size: 11px; color: var(--text3); padding: 6px 0; font-weight: 700; }
+  .cal-weekday.sun { color: #C0392B; }
+  .cal-weekday.sat { color: #2C5F8A; }
+  .cal-cell { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 6px; border-radius: var(--radius-sm); cursor: pointer; position: relative; }
+  .cal-cell:active { background: var(--surface2); }
+  .cal-cell.today { background: var(--accent); }
+  .cal-cell.today .cal-date { color: white; }
+  .cal-cell.selected:not(.today) { outline: 2px solid var(--accent); }
+  .cal-cell.other-month .cal-date { color: var(--text3); }
+  .cal-date { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1; }
+  .cal-dots { display: flex; gap: 2px; justify-content: center; margin-top: 3px; flex-wrap: wrap; max-width: 24px; }
+  .cal-dot { width: 4px; height: 4px; border-radius: 50%; }
+  .cal-legend { display: flex; gap: 14px; margin-top: 14px; font-size: 11px; color: var(--text3); }
+  .cal-legend span { display: flex; align-items: center; gap: 4px; }
+  .cal-legend .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Settings view */
+  .settings-wrap { padding: 16px; }
+  .settings-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 16px; margin-bottom: 12px; }
+  .settings-card h3 { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .settings-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block; }
+  .settings-input { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; outline: none; margin-bottom: 10px; }
+  .settings-input:focus { border-color: var(--accent); }
+  .settings-btn { width: 100%; padding: 11px; font-size: 14px; font-weight: 700; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-family: inherit; }
+  .settings-btn:active { opacity: 0.85; }
+  .settings-status { font-size: 12px; text-align: center; margin-top: 8px; padding: 8px; border-radius: var(--radius-sm); }
+  .settings-status.ok { background: var(--green-light); color: var(--green); }
+  .settings-status.err { background: var(--red-light); color: var(--red); }
+  .settings-hint { font-size: 12px; color: var(--text3); line-height: 1.7; padding: 10px 12px; background: var(--surface2); border-radius: var(--radius-sm); margin-top: 10px; }
+  .settings-hint b { color: var(--text2); font-weight: 700; }
+  .prop-list-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .prop-list-item:last-child { border-bottom: none; }
+  .prop-list-name { font-size: 14px; font-weight: 500; }
+  .prop-list-id { font-size: 11px; color: var(--text3); font-family: monospace; }
+  .url-box { background: var(--surface2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12px; font-family: monospace; word-break: break-all; color: var(--accent); margin-top: 8px; }
+  .copy-btn { width: 100%; margin-top: 8px; padding: 9px; font-size: 12px; font-weight: 700; background: none; color: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-sm); cursor: pointer; font-family: inherit; }
+  .copy-btn:active { background: var(--accent-light); }
+  .demo-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; background: var(--amber-light); color: var(--amber); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="header-area"></div>
+  <div id="main-area"></div>
+  <div class="tabbar" id="tabbar"></div>
+</div>
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+const CONFIG = {
+  // URLパラメータ ?company=xxx から会社名を取得
+  getCompanyId: () => new URLSearchParams(location.search).get('company') || 'demo',
+
+  // Beds24 v2 API設定
+  // APIキー取得後にここに入力するか、設定画面から入力
+  API_KEY: localStorage.getItem('beds24_api_key') || '',
+
+  // 会社ごとの施設ID設定（設定画面から変更可能）
+  // 例: { 'company_a': [12345, 67890], 'company_b': [11111] }
+  getPropertyIds: (companyId) => {
+    const saved = localStorage.getItem('prop_ids_' + companyId);
+    return saved ? JSON.parse(saved) : [];
+  }
+};
+
+// ============================================================
+// デモデータ
+// ============================================================
+function makeDemoBookings() {
+  const props = [
+    { id: 1001, name: '梅田スタジオ' },
+    { id: 1002, name: '難波コンフォート' },
+    { id: 1003, name: '天王寺ルーム' },
+    { id: 1004, name: '心斎橋スイート' },
+  ];
+  const guests = ['田中様','山田様','佐藤様','鈴木様','伊藤様','渡辺様'];
+  const types = [
+    { type: 'checkout', label: 'チェックアウト', co: '11:00', ci: null },
+    { type: 'checkin', label: 'チェックイン', co: null, ci: '15:00' },
+    { type: 'both', label: 'アウト＆イン', co: '11:00', ci: '15:00' },
+  ];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const bookings = {};
+  props.forEach(p => {
+    for (let i = -5; i <= 20; i++) {
+      if (Math.random() < 0.5) {
+        const d = new Date(today); d.setDate(d.getDate() + i);
+        const ds = fmtDate(d);
+        const t = types[Math.floor(Math.random() * types.length)];
+        const g = guests[Math.floor(Math.random() * guests.length)];
+        const key = ds;
+        if (!bookings[key]) bookings[key] = [];
+        bookings[key].push({
+          propId: p.id, propName: p.name, date: ds, type: t.type, label: t.label,
+          guest: g, checkout: t.co, checkin: t.ci,
+          towels: Math.floor(Math.random()*4)+1,
+          linen: Math.floor(Math.random()*3)+1,
+        });
+      }
+    }
+  });
+  return bookings;
+}
+
+// ============================================================
+// State
+// ============================================================
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+let DEMO_BOOKINGS = null;
+
+const state = {
+  view: 'today',
+  date: new Date(TODAY),
+  calMonth: new Date(TODAY.getFullYear(), TODAY.getMonth(), 1),
+  calFilter: 'all',
+  checks: JSON.parse(localStorage.getItem('checks') || '{}'),
+  memos: JSON.parse(localStorage.getItem('memos') || '{}'),
+  memoOpen: {},
+  apiKey: CONFIG.API_KEY,
+  apiStatus: '',
+  bookingsCache: {},
+  properties: [],
+  isLive: false,
+  loading: false,
+  companyId: CONFIG.getCompanyId(),
+  companyName: localStorage.getItem('company_name_' + CONFIG.getCompanyId()) || 'デモ会社',
+};
+
+function saveChecks() { localStorage.setItem('checks', JSON.stringify(state.checks)); }
+function saveMemos() { localStorage.setItem('memos', JSON.stringify(state.memos)); }
+
+// ============================================================
+// Helpers
+// ============================================================
+function fmtDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function fmtJP(d) {
+  const w = ['日','月','火','水','木','金','土'][d.getDay()];
+  return (d.getMonth()+1) + '月' + d.getDate() + '日（' + w + '）';
+}
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
+function isToday(d) { return fmtDate(d) === fmtDate(TODAY); }
+
+function checkKey(propId, date) { return propId + '_' + fmtDate(date); }
+function memoKey(propId, date) { return propId + '_' + fmtDate(date); }
+
+function getBookingsForDate(date) {
+  const ds = fmtDate(date);
+  if (state.isLive) return state.bookingsCache[ds] || [];
+  if (!DEMO_BOOKINGS) DEMO_BOOKINGS = makeDemoBookings();
+  return DEMO_BOOKINGS[ds] || [];
+}
+
+// ============================================================
+// Beds24 API v2
+// ============================================================
+async function fetchBeds24(apiKey, propIds, fromDate, toDate) {
+  const params = new URLSearchParams({
+    arrivalFrom: fromDate,
+    arrivalTo: toDate,
+    departureFrom: fromDate,
+    departureTo: toDate,
+  });
+  if (propIds.length > 0) {
+    propIds.forEach(id => params.append('propId', id));
+  }
+  const res = await fetch('https://api.beds24.com/v2/bookings?' + params.toString(), {
+    headers: { 'token': apiKey, 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) throw new Error('API Error: ' + res.status);
+  return await res.json();
+}
+
+async function fetchProperties(apiKey) {
+  const res = await fetch('https://api.beds24.com/v2/properties', {
+    headers: { 'token': apiKey }
+  });
+  if (!res.ok) throw new Error('API Error: ' + res.status);
+  return await res.json();
+}
+
+function convertBeds24Booking(b) {
+  const hasCheckout = !!b.departure;
+  const hasCheckin = !!b.arrival;
+  const arrDate = b.arrival ? b.arrival.substring(0, 10) : null;
+  const depDate = b.departure ? b.departure.substring(0, 10) : null;
+  const results = [];
+
+  // チェックアウト日
+  if (depDate) {
+    const existing = results.find(r => r.date === depDate && r.propId == b.propId);
+    if (existing) {
+      existing.type = 'both'; existing.label = 'アウト＆イン'; existing.checkin = b.checkIn || '15:00';
+    } else {
+      results.push({
+        propId: b.propId, propName: b.propName || ('施設' + b.propId),
+        date: depDate, type: 'checkout', label: 'チェックアウト',
+        guest: (b.firstName || '') + (b.lastName || '') + '様',
+        checkout: b.checkOut || '11:00', checkin: null,
+        towels: b.numAdult || 1, linen: Math.ceil((b.numAdult || 1) / 2),
+      });
+    }
+  }
+  // チェックイン日
+  if (arrDate && arrDate !== depDate) {
+    results.push({
+      propId: b.propId, propName: b.propName || ('施設' + b.propId),
+      date: arrDate, type: 'checkin', label: 'チェックイン',
+      guest: (b.firstName || '') + (b.lastName || '') + '様',
+      checkout: null, checkin: b.checkIn || '15:00',
+      towels: b.numAdult || 1, linen: Math.ceil((b.numAdult || 1) / 2),
+    });
+  }
+  return results;
+}
+
+// ============================================================
+// Render helpers
+// ============================================================
+function renderBadge(type, checked) {
+  if (checked) return '<span class="badge done">清掃完了</span>';
+  const map = { checkout: ['checkout','チェックアウト'], checkin: ['checkin','チェックイン'], both: ['both','アウト＆イン'], none: ['none','清掃なし'] };
+  const [cls, lbl] = map[type] || map.none;
+  return `<span class="badge ${cls}">${lbl}</span>`;
+}
+
+function renderCard(b) {
+  const date = new Date(b.date + 'T00:00:00');
+  const ck = checkKey(b.propId, date);
+  const mk = memoKey(b.propId, date);
+  const checked = !!state.checks[ck];
+  const memo = state.memos[mk] || '';
+  const memoOpen = !!state.memoOpen[mk];
+
+  const details = [];
+  if (b.checkout) details.push(`<span class="detail-pill"><span class="icon">🚪</span>OUT ${b.checkout}</span>`);
+  if (b.checkin) details.push(`<span class="detail-pill"><span class="icon">🔑</span>IN ${b.checkin}</span>`);
+  details.push(`<span class="detail-pill"><span class="icon">🛁</span>タオル ${b.towels}枚</span>`);
+  details.push(`<span class="detail-pill"><span class="icon">🛏</span>リネン ${b.linen}セット</span>`);
+
+  return `<div class="prop-card ${checked ? 'is-done' : ''}" id="card-${ck}">
+  <div class="prop-card-body">
+    <div class="prop-card-top">
+      <div class="prop-card-info">
+        <div class="prop-card-name">${b.propName}</div>
+        <div class="prop-card-guest">${b.guest}</div>
+      </div>
+      ${renderBadge(b.type, checked)}
+    </div>
+    <div class="prop-details">${details.join('')}</div>
+  </div>
+  <div class="prop-card-footer">
+    <button class="check-btn ${checked ? 'done' : ''}" onclick="toggleCheck('${b.propId}','${b.date}')">
+      <div class="circle"></div>
+      ${checked ? '清掃済み' : '清掃済みにする'}
+    </button>
+    <div class="divider-v"></div>
+    <button class="memo-btn ${memo ? 'has-memo' : ''}" onclick="toggleMemo('${b.propId}','${b.date}')">
+      ${memo ? '📝' : '✏️'} メモ
+    </button>
+  </div>
+  ${memoOpen ? `<div class="memo-area">
+    <textarea class="memo-textarea" placeholder="特記事項、設備状態、次回引き継ぎ事項など"
+      oninput="updateMemo('${b.propId}','${b.date}',this.value)">${memo}</textarea>
+    ${memo ? '<div class="memo-saved">✓ 保存済み</div>' : ''}
+  </div>` : (memo ? `<div style="padding:8px 14px 12px; font-size:12px; color:var(--text2); background:var(--surface2);">${memo}</div>` : '')}
+</div>`;
+}
+
+function renderTodayView() {
+  const date = state.date;
+  const bookings = getBookingsForDate(date);
+  const pending = bookings.filter(b => !state.checks[checkKey(b.propId, date)]);
+  const done = bookings.filter(b => state.checks[checkKey(b.propId, date)]);
+
+  // Header
+  const isT = isToday(date);
+  document.getElementById('header-area').innerHTML = `
+    <div class="header">
+      <div class="header-top">
+        <div>
+          <div class="app-title">清掃カレンダー</div>
+          <div class="company-name">${state.companyName}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${state.isLive
+            ? '<span style="font-size:11px;color:var(--green);font-weight:700;">● LIVE</span>'
+            : '<span class="demo-badge">● デモ</span>'}
+        </div>
+      </div>
+      <div class="date-nav">
+        <button class="date-nav-btn" onclick="changeDay(-1)">‹</button>
+        <div class="date-center">
+          <div class="date-main">${fmtJP(date)}</div>
+          ${!isT ? '<div class="date-sub">今日との差: ' + Math.round((date-TODAY)/86400000) + '日</div>' : '<div class="date-sub">今日</div>'}
+        </div>
+        <button class="date-nav-btn" onclick="changeDay(1)">›</button>
+      </div>
+    </div>`;
+
+  // Stats
+  let html = `<div class="stats-bar">
+    <div class="stat-card"><div class="stat-num pending">${pending.length}</div><div class="stat-label">清掃待ち</div></div>
+    <div class="stat-card"><div class="stat-num done">${done.length}</div><div class="stat-label">清掃完了</div></div>
+    <div class="stat-card"><div class="stat-num total">${bookings.length}</div><div class="stat-label">合計</div></div>
+  </div>`;
+
+  // Cards
+  html += '<div class="section">';
+  if (bookings.length === 0) {
+    html += '<div class="empty"><div class="empty-icon">🌿</div><div class="empty-text">本日の清掃はありません</div></div>';
+  } else {
+    if (pending.length > 0) {
+      html += `<div class="section-header"><div class="section-dot pending"></div><span class="section-title-text">清掃待ち</span><span class="section-count">${pending.length}件</span></div>`;
+      html += pending.map(renderCard).join('');
+    }
+    if (done.length > 0) {
+      html += `<div class="section-header" style="margin-top:20px;"><div class="section-dot done"></div><span class="section-title-text">清掃完了</span><span class="section-count">${done.length}件</span></div>`;
+      html += done.map(renderCard).join('');
+    }
+  }
+  html += '</div>';
+  document.getElementById('main-area').innerHTML = html;
+}
+
+function renderCalendarView() {
+  document.getElementById('header-area').innerHTML = `
+    <div class="header">
+      <div class="header-top">
+        <div class="company-name">カレンダー</div>
+        ${state.isLive ? '<span style="font-size:11px;color:var(--green);font-weight:700;">● LIVE</span>' : '<span class="demo-badge">● デモ</span>'}
+      </div>
+    </div>`;
+
+  const cm = state.calMonth;
+  const y = cm.getFullYear(), mo = cm.getMonth();
+  const firstDay = new Date(y, mo, 1).getDay();
+  const daysInMonth = new Date(y, mo+1, 0).getDate();
+  const propId = state.calFilter === 'all' ? null : parseInt(state.calFilter);
+
+  // Get all properties for filter
+  const allProps = getAllProperties();
+
+  let html = '<div class="calendar-wrap">';
+  html += `<div class="month-nav">
+    <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
+    <span class="month-title">${y}年${mo+1}月</span>
+    <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
+  </div>`;
+
+  // Filter chips
+  html += '<div class="cal-filter"><button class="cal-chip ' + (state.calFilter === 'all' ? 'active' : '') + '" onclick="setCalFilter(\'all\')">すべて</button>';
+  allProps.forEach(p => {
+    html += `<button class="cal-chip ${state.calFilter == p.id ? 'active' : ''}" onclick="setCalFilter(${p.id})">${p.name}</button>`;
+  });
+  html += '</div>';
+
+  // Grid
+  const weekdays = ['日','月','火','水','木','金','土'];
+  html += '<div class="cal-grid">';
+  weekdays.forEach((d, i) => {
+    const cls = i === 0 ? 'sun' : i === 6 ? 'sat' : '';
+    html += `<div class="cal-weekday ${cls}">${d}</div>`;
+  });
+  for (let i = 0; i < firstDay; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(y, mo, d);
+    const bks = getBookingsForDate(dt).filter(b => propId === null || b.propId == propId);
+    const isT = fmtDate(dt) === fmtDate(TODAY);
+    const isSel = fmtDate(dt) === fmtDate(state.date);
+    const allDone = bks.length > 0 && bks.every(b => !!state.checks[checkKey(b.propId, dt)]);
+    let dots = '';
+    if (allDone) {
+      dots = '<div class="cal-dots"><div class="cal-dot" style="background:var(--green)"></div></div>';
+    } else if (bks.length > 0) {
+      const hasCo = bks.some(b => b.type === 'checkout' || b.type === 'both');
+      const hasCi = bks.some(b => b.type === 'checkin' || b.type === 'both');
+      dots = '<div class="cal-dots">';
+      if (hasCo) dots += '<div class="cal-dot" style="background:var(--amber)"></div>';
+      if (hasCi) dots += '<div class="cal-dot" style="background:var(--accent)"></div>';
+      dots += '</div>';
+    }
+    html += `<div class="cal-cell ${isT?'today':''} ${!isT&&isSel?'selected':''}" onclick="selectCalDate(${y},${mo},${d})">
+      <div class="cal-date">${d}</div>${dots}</div>`;
+  }
+  html += '</div>';
+  html += `<div class="cal-legend">
+    <span><div class="dot" style="background:var(--amber)"></div>チェックアウト</span>
+    <span><div class="dot" style="background:var(--accent)"></div>チェックイン</span>
+    <span><div class="dot" style="background:var(--green)"></div>完了</span>
+  </div>`;
+  html += '</div>';
+  document.getElementById('main-area').innerHTML = html;
+}
+
+function renderSettingsView() {
+  document.getElementById('header-area').innerHTML = `
+    <div class="header">
+      <div class="header-top"><div class="company-name">設定・API</div></div>
+    </div>`;
+
+  const companyId = state.companyId;
+  const savedPropIds = CONFIG.getPropertyIds(companyId).join(', ');
+  const currentUrl = location.href.split('?')[0] + '?company=' + companyId;
+  const allProps = getAllProperties();
+
+  let html = '<div class="settings-wrap">';
+
+  // API Key
+  html += `<div class="settings-card">
+    <h3>Beds24 API接続</h3>
+    <label class="settings-label">APIキー（Beds24 v2）</label>
+    <input class="settings-input" type="password" id="inp-apikey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${state.apiKey}">
+    <button class="settings-btn" onclick="connectApi()">接続テスト＆保存</button>
+    <div id="api-status-msg"></div>
+    <div class="settings-hint">
+      <b>取得方法：</b> Beds24 → 設定 → アカウント → Developer API → 「新しいキーを生成」<br>
+      権限は「読み取り専用」で十分です。
+    </div>
+  </div>`;
+
+  // Property IDs
+  html += `<div class="settings-card">
+    <h3>施設設定（${companyId}）</h3>
+    <label class="settings-label">施設ID（カンマ区切り）</label>
+    <input class="settings-input" type="text" id="inp-propids" placeholder="12345, 67890, 11111" value="${savedPropIds}">
+    <label class="settings-label" style="margin-top:4px;">会社・グループ名</label>
+    <input class="settings-input" type="text" id="inp-companyname" placeholder="〇〇清掃サービス" value="${state.companyName}">
+    <button class="settings-btn" onclick="saveSettings()">保存</button>
+  </div>`;
+
+  // URL Share
+  html += `<div class="settings-card">
+    <h3>清掃会社への共有URL</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">このURLを清掃会社さんに送るだけで使えます</p>
+    <div class="url-box">${currentUrl}</div>
+    <button class="copy-btn" onclick="copyUrl('${currentUrl}')">URLをコピー</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:10px;">
+      他の会社には <code>?company=B</code> などURLの末尾を変えて共有してください
+    </div>
+  </div>`;
+
+  // Props list
+  if (allProps.length > 0) {
+    html += `<div class="settings-card"><h3>接続済み施設</h3>`;
+    allProps.forEach(p => {
+      html += `<div class="prop-list-item"><span class="prop-list-name">${p.name}</span><span class="prop-list-id">ID: ${p.id}</span></div>`;
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  document.getElementById('main-area').innerHTML = html;
+}
+
+// ============================================================
+// Actions
+// ============================================================
+function getAllProperties() {
+  if (state.isLive && state.properties.length > 0) return state.properties;
+  if (!DEMO_BOOKINGS) DEMO_BOOKINGS = makeDemoBookings();
+  const propMap = {};
+  Object.values(DEMO_BOOKINGS).flat().forEach(b => { propMap[b.propId] = b.propName; });
+  return Object.entries(propMap).map(([id, name]) => ({ id: parseInt(id), name }));
+}
+
+function toggleCheck(propId, dateStr) {
+  const date = new Date(dateStr + 'T00:00:00');
+  const ck = checkKey(propId, date);
+  state.checks[ck] = !state.checks[ck];
+  saveChecks();
+  render();
+}
+
+function toggleMemo(propId, dateStr) {
+  const date = new Date(dateStr + 'T00:00:00');
+  const mk = memoKey(propId, date);
+  state.memoOpen[mk] = !state.memoOpen[mk];
+  render();
+}
+
+function updateMemo(propId, dateStr, val) {
+  const date = new Date(dateStr + 'T00:00:00');
+  const mk = memoKey(propId, date);
+  state.memos[mk] = val;
+  saveMemos();
+}
+
+function changeDay(n) { state.date = addDays(state.date, n); render(); }
+function changeMonth(n) {
+  const cm = state.calMonth;
+  state.calMonth = new Date(cm.getFullYear(), cm.getMonth()+n, 1);
+  render();
+}
+function selectCalDate(y, mo, d) {
+  state.date = new Date(y, mo, d);
+  state.view = 'today';
+  render();
+}
+function setCalFilter(v) { state.calFilter = v; render(); }
+
+async function connectApi() {
+  const key = document.getElementById('inp-apikey').value.trim();
+  const msg = document.getElementById('api-status-msg');
+  if (!key) { msg.innerHTML = '<div class="settings-status err">APIキーを入力してください</div>'; return; }
+  msg.innerHTML = '<div class="settings-status">接続中...</div>';
+  try {
+    const data = await fetchProperties(key);
+    if (data && data.length > 0) {
+      state.apiKey = key;
+      state.properties = data.map(p => ({ id: p.propId, name: p.name }));
+      state.isLive = true;
+      localStorage.setItem('beds24_api_key', key);
+      msg.innerHTML = `<div class="settings-status ok">✓ 接続成功！${data.length}件の施設を取得しました</div>`;
+    } else {
+      msg.innerHTML = '<div class="settings-status err">施設データが見つかりませんでした</div>';
+    }
+  } catch(e) {
+    msg.innerHTML = `<div class="settings-status err">エラー: ${e.message}</div>`;
+  }
+}
+
+function saveSettings() {
+  const propIds = document.getElementById('inp-propids').value
+    .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  const name = document.getElementById('inp-companyname').value.trim();
+  localStorage.setItem('prop_ids_' + state.companyId, JSON.stringify(propIds));
+  if (name) {
+    state.companyName = name;
+    localStorage.setItem('company_name_' + state.companyId, name);
+  }
+  alert('保存しました');
+  render();
+}
+
+function copyUrl(url) {
+  navigator.clipboard.writeText(url).then(() => alert('コピーしました！'));
+}
+
+// ============================================================
+// Tab bar & main render
+// ============================================================
+function renderTabBar() {
+  const tabs = [
+    { id: 'today', icon: '🧹', label: '今日' },
+    { id: 'calendar', icon: '📅', label: 'カレンダー' },
+    { id: 'settings', icon: '⚙️', label: '設定' },
+  ];
+  document.getElementById('tabbar').innerHTML = tabs.map(t =>
+    `<button class="tab-item ${state.view === t.id ? 'active' : ''}" onclick="setView('${t.id}')">
+      <div class="tab-icon">${t.icon}</div>
+      <div class="tab-label">${t.label}</div>
+    </button>`
+  ).join('');
+}
+
+function setView(v) { state.view = v; render(); }
+
+function render() {
+  renderTabBar();
+  if (state.view === 'today') renderTodayView();
+  else if (state.view === 'calendar') renderCalendarView();
+  else renderSettingsView();
+}
+
+render();
+</script>
+</body>
+</html>
