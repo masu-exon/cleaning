@@ -302,9 +302,13 @@ async function apiv1(endpoint, body) {
 }
 
 async function fetchProperties(apiKey, propKey) {
-  return await apiv1('/json/getProperties', {
+  const res = await apiv1('/json/getProperties', {
     authentication: { apiKey, propKey }
   });
+  // v1は {"getProperties": [...]} の形で返ってくる
+  if (res && res.getProperties) return res.getProperties;
+  if (Array.isArray(res)) return res;
+  return res;
 }
 
 async function fetchBookings(apiKey, propKey, fromDate, toDate) {
@@ -651,7 +655,7 @@ async function connectApi() {
       localStorage.setItem('beds24_api_key', key);
       localStorage.setItem('beds24_prop_key', propKey);
       const props = Array.isArray(data) ? data : [data];
-      state.properties = props.map(p => ({ id: p.propId, name: p.name || ('施設' + p.propId) }));
+      state.properties = props.map(p => ({ id: String(p.propId), name: p.name || ('施設' + p.propId) }));
       await loadLiveBookings();
       msg.innerHTML = '<div class="settings-status ok">✓ 接続成功！予約データを取得しました</div>';
       render();
@@ -672,9 +676,9 @@ async function loadLiveBookings() {
   if (Array.isArray(bookings)) {
     state.bookingsCache = {};
     const propNames = {};
-    state.properties.forEach(p => { propNames[p.id] = p.name; });
+    state.properties.forEach(p => { propNames[String(p.id)] = p.name; });
     bookings.forEach(b => {
-      const converted = convertV1Booking(b, propNames[b.propId]);
+      const converted = convertV1Booking(b, propNames[String(b.propId)]);
       converted.forEach(c => {
         if (!state.bookingsCache[c.date]) state.bookingsCache[c.date] = [];
         state.bookingsCache[c.date].push(c);
