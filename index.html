@@ -310,7 +310,9 @@ async function fetchProperties(apiKey) {
     headers: { 'token': apiKey }
   });
   if (!res.ok) throw new Error('API Error: ' + res.status);
-  return await res.json();
+  const json = await res.json();
+  // Beds24 v2は { data: [...] } または [...] の形で返ってくる
+  return Array.isArray(json) ? json : (json.data || []);
 }
 
 function convertBeds24Booking(b) {
@@ -642,7 +644,7 @@ async function connectApi() {
     const data = await fetchProperties(key);
     if (data && data.length > 0) {
       state.apiKey = key;
-      state.properties = data.map(p => ({ id: p.propId, name: p.name }));
+      state.properties = data.map(p => ({ id: p.propId || p.id, name: p.name || p.propName || ("施設" + (p.propId || p.id)) }));
       state.isLive = true;
       localStorage.setItem('beds24_api_key', key);
       msg.innerHTML = `<div class="settings-status ok">✓ 接続成功！${data.length}件の施設を取得しました</div>`;
