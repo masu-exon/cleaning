@@ -298,7 +298,7 @@ async function fetchBeds24(apiKey, propIds, fromDate, toDate) {
   if (propIds.length > 0) {
     propIds.forEach(id => params.append('propId', id));
   }
-  const res = await fetch('https://api.beds24.com/v2/bookings?' + params.toString(), {
+  const res = await fetch('https://beds24-proxy.masu-659.workers.dev/proxy/bookings?' + params.toString(), {
     headers: { 'token': apiKey, 'Content-Type': 'application/json' }
   });
   if (!res.ok) throw new Error('API Error: ' + res.status);
@@ -306,7 +306,7 @@ async function fetchBeds24(apiKey, propIds, fromDate, toDate) {
 }
 
 async function fetchProperties(apiKey) {
-  const res = await fetch('https://api.beds24.com/v2/properties', {
+  const res = await fetch('https://beds24-proxy.masu-659.workers.dev/proxy/properties', {
     headers: { 'token': apiKey }
   });
   if (!res.ok) throw new Error('API Error: ' + res.status);
