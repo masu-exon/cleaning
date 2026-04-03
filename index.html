@@ -250,6 +250,7 @@ const state = {
   memos: JSON.parse(localStorage.getItem('memos') || '{}'),
   memoOpen: {},
   apiKey: CONFIG.API_KEY,
+  propKey: localStorage.getItem('beds24_prop_key') || '',
   apiStatus: '',
   bookingsCache: {},
   properties: [],
@@ -286,69 +287,67 @@ function getBookingsForDate(date) {
 }
 
 // ============================================================
-// Beds24 API v2
+// Beds24 API v1
 // ============================================================
-async function fetchBeds24(apiKey, propIds, fromDate, toDate) {
-  const params = new URLSearchParams({
-    arrivalFrom: fromDate,
-    arrivalTo: toDate,
-    departureFrom: fromDate,
-    departureTo: toDate,
-  });
-  if (propIds.length > 0) {
-    propIds.forEach(id => params.append('propId', id));
-  }
-  const res = await fetch('https://beds24-proxy.masu-659.workers.dev/proxy/bookings?' + params.toString(), {
-    headers: { 'token': apiKey, 'Content-Type': 'application/json' }
+const PROXY = 'https://beds24-proxy.masu-659.workers.dev/proxy';
+
+async function apiv1(endpoint, body) {
+  const res = await fetch(PROXY + endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error('API Error: ' + res.status);
   return await res.json();
 }
 
-async function fetchProperties(apiKey) {
-  const res = await fetch('https://beds24-proxy.masu-659.workers.dev/proxy/properties', {
-    headers: { 'token': apiKey }
+async function fetchProperties(apiKey, propKey) {
+  return await apiv1('/json/getProperties', {
+    authentication: { apiKey, propKey }
   });
-  if (!res.ok) throw new Error('API Error: ' + res.status);
-  const json = await res.json();
-  // Beds24 v2は { data: [...] } または [...] の形で返ってくる
-  return Array.isArray(json) ? json : (json.data || []);
 }
 
-function convertBeds24Booking(b) {
-  const hasCheckout = !!b.departure;
-  const hasCheckin = !!b.arrival;
-  const arrDate = b.arrival ? b.arrival.substring(0, 10) : null;
-  const depDate = b.departure ? b.departure.substring(0, 10) : null;
-  const results = [];
+async function fetchBookings(apiKey, propKey, fromDate, toDate) {
+  return await apiv1('/json/getBookings', {
+    authentication: { apiKey, propKey },
+    departureFrom: fromDate,
+    departureTo: toDate,
+    arrivalFrom: fromDate,
+    arrivalTo: toDate,
+    includeAllProperties: true
+  });
+}
 
-  // チェックアウト日
-  if (depDate) {
-    const existing = results.find(r => r.date === depDate && r.propId == b.propId);
-    if (existing) {
-      existing.type = 'both'; existing.label = 'アウト＆イン'; existing.checkin = b.checkIn || '15:00';
-    } else {
-      results.push({
-        propId: b.propId, propName: b.propName || ('施設' + b.propId),
-        date: depDate, type: 'checkout', label: 'チェックアウト',
-        guest: (b.firstName || '') + (b.lastName || '') + '様',
-        checkout: b.checkOut || '11:00', checkin: null,
-        towels: b.numAdult || 1, linen: Math.ceil((b.numAdult || 1) / 2),
-      });
-    }
-  }
-  // チェックイン日
-  if (arrDate && arrDate !== depDate) {
+function convertV1Booking(b, propName) {
+  const arrDate = b.firstNight;
+  const depDate = b.lastNight;
+  const guestName = ((b.guestFirstName || '') + ' ' + (b.guestName || '')).trim() + '様';
+  const adults = parseInt(b.numAdult) || 1;
+  const results = [];
+  if (arrDate === depDate) {
     results.push({
-      propId: b.propId, propName: b.propName || ('施設' + b.propId),
+      propId: b.propId, propName: propName || ('施設' + b.propId),
+      date: depDate, type: 'both', label: 'アウト＆イン',
+      guest: guestName, checkout: '11:00', checkin: '15:00',
+      towels: adults, linen: Math.ceil(adults / 2),
+    });
+  } else {
+    results.push({
+      propId: b.propId, propName: propName || ('施設' + b.propId),
+      date: depDate, type: 'checkout', label: 'チェックアウト',
+      guest: guestName, checkout: '11:00', checkin: null,
+      towels: adults, linen: Math.ceil(adults / 2),
+    });
+    results.push({
+      propId: b.propId, propName: propName || ('施設' + b.propId),
       date: arrDate, type: 'checkin', label: 'チェックイン',
-      guest: (b.firstName || '') + (b.lastName || '') + '様',
-      checkout: null, checkin: b.checkIn || '15:00',
-      towels: b.numAdult || 1, linen: Math.ceil((b.numAdult || 1) / 2),
+      guest: guestName, checkout: null, checkin: '15:00',
+      towels: adults, linen: Math.ceil(adults / 2),
     });
   }
   return results;
 }
+
 
 // ============================================================
 // Render helpers
@@ -543,24 +542,25 @@ function renderSettingsView() {
   let html = '<div class="settings-wrap">';
 
   // API Key
+  const savedPropKey = localStorage.getItem('beds24_prop_key') || '';
   html += `<div class="settings-card">
     <h3>Beds24 API接続</h3>
-    <label class="settings-label">APIキー（Beds24 v2）</label>
-    <input class="settings-input" type="password" id="inp-apikey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${state.apiKey}">
+    <label class="settings-label">APIキー（設定 → アカウント → アカウントアクセス）</label>
+    <input class="settings-input" type="password" id="inp-apikey" placeholder="cleaning20250403" value="${state.apiKey}">
+    <label class="settings-label">プロパティキー（設定 → プロパティ → 施設を選択 → 設定）</label>
+    <input class="settings-input" type="password" id="inp-propkey" placeholder="H4dSOVKZ76z2gDcwWKsONSely" value="${savedPropKey}">
     <button class="settings-btn" onclick="connectApi()">接続テスト＆保存</button>
     <div id="api-status-msg"></div>
     <div class="settings-hint">
-      <b>取得方法：</b> Beds24 → 設定 → アカウント → Developer API → 「新しいキーを生成」<br>
-      権限は「読み取り専用」で十分です。
+      <b>APIキー：</b> 設定 → アカウント → アカウントアクセス → APIキー欄<br>
+      <b>プロパティキー：</b> 設定 → プロパティ → 施設選択 → 設定タブ
     </div>
   </div>`;
 
-  // Property IDs
+  // Property name settings
   html += `<div class="settings-card">
     <h3>施設設定（${companyId}）</h3>
-    <label class="settings-label">施設ID（カンマ区切り）</label>
-    <input class="settings-input" type="text" id="inp-propids" placeholder="12345, 67890, 11111" value="${savedPropIds}">
-    <label class="settings-label" style="margin-top:4px;">会社・グループ名</label>
+    <label class="settings-label">会社・グループ名</label>
     <input class="settings-input" type="text" id="inp-companyname" placeholder="〇〇清掃サービス" value="${state.companyName}">
     <button class="settings-btn" onclick="saveSettings()">保存</button>
   </div>`;
@@ -637,30 +637,54 @@ function setCalFilter(v) { state.calFilter = v; render(); }
 
 async function connectApi() {
   const key = document.getElementById('inp-apikey').value.trim();
+  const propKey = document.getElementById('inp-propkey').value.trim();
   const msg = document.getElementById('api-status-msg');
   if (!key) { msg.innerHTML = '<div class="settings-status err">APIキーを入力してください</div>'; return; }
+  if (!propKey) { msg.innerHTML = '<div class="settings-status err">プロパティキーを入力してください</div>'; return; }
   msg.innerHTML = '<div class="settings-status">接続中...</div>';
   try {
-    const data = await fetchProperties(key);
-    if (data && data.length > 0) {
+    const data = await fetchProperties(key, propKey);
+    if (data && !data.error) {
       state.apiKey = key;
-      state.properties = data.map(p => ({ id: p.propId || p.id, name: p.name || p.propName || ("施設" + (p.propId || p.id)) }));
+      state.propKey = propKey;
       state.isLive = true;
       localStorage.setItem('beds24_api_key', key);
-      msg.innerHTML = `<div class="settings-status ok">✓ 接続成功！${data.length}件の施設を取得しました</div>`;
+      localStorage.setItem('beds24_prop_key', propKey);
+      const props = Array.isArray(data) ? data : [data];
+      state.properties = props.map(p => ({ id: p.propId, name: p.name || ('施設' + p.propId) }));
+      await loadLiveBookings();
+      msg.innerHTML = '<div class="settings-status ok">✓ 接続成功！予約データを取得しました</div>';
+      render();
     } else {
-      msg.innerHTML = '<div class="settings-status err">施設データが見つかりませんでした</div>';
+      msg.innerHTML = '<div class="settings-status err">エラー: ' + (data.error || '接続失敗') + '</div>';
     }
   } catch(e) {
-    msg.innerHTML = `<div class="settings-status err">エラー: ${e.message}</div>`;
+    msg.innerHTML = '<div class="settings-status err">エラー: ' + e.message + '</div>';
+  }
+}
+
+async function loadLiveBookings() {
+  const today = new Date();
+  const from = new Date(today); from.setDate(from.getDate() - 1);
+  const to = new Date(today); to.setDate(to.getDate() + 60);
+  const fmt = d => d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  const bookings = await fetchBookings(state.apiKey, state.propKey, fmt(from), fmt(to));
+  if (Array.isArray(bookings)) {
+    state.bookingsCache = {};
+    const propNames = {};
+    state.properties.forEach(p => { propNames[p.id] = p.name; });
+    bookings.forEach(b => {
+      const converted = convertV1Booking(b, propNames[b.propId]);
+      converted.forEach(c => {
+        if (!state.bookingsCache[c.date]) state.bookingsCache[c.date] = [];
+        state.bookingsCache[c.date].push(c);
+      });
+    });
   }
 }
 
 function saveSettings() {
-  const propIds = document.getElementById('inp-propids').value
-    .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
   const name = document.getElementById('inp-companyname').value.trim();
-  localStorage.setItem('prop_ids_' + state.companyId, JSON.stringify(propIds));
   if (name) {
     state.companyName = name;
     localStorage.setItem('company_name_' + state.companyId, name);
