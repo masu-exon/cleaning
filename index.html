@@ -727,7 +727,27 @@ function render() {
   else renderSettingsView();
 }
 
-render();
+// ページ読み込み時にAPIキーが保存されていれば自動接続
+async function autoConnect() {
+  const key = localStorage.getItem('beds24_api_key') || '';
+  const propKey = localStorage.getItem('beds24_prop_key') || '';
+  if (!key || !propKey) { render(); return; }
+  try {
+    const data = await fetchProperties(key, propKey);
+    if (data && !data.error && data.length > 0) {
+      state.apiKey = key;
+      state.propKey = propKey;
+      state.isLive = true;
+      state.properties = data.map(p => ({ id: String(p.propId), name: p.name || ('施設' + p.propId) }));
+      await loadLiveBookings();
+    }
+  } catch(e) {
+    console.log('自動接続失敗:', e.message);
+  }
+  render();
+}
+
+autoConnect();
 </script>
 </body>
 </html>
