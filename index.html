@@ -183,6 +183,7 @@
 const CONFIG = {
   // URLパラメータ ?company=xxx から会社名を取得
   getCompanyId: () => new URLSearchParams(location.search).get('company') || 'demo',
+  isAdmin: () => new URLSearchParams(location.search).get('admin') === 'true',
 
   // Beds24 v2 API設定
   // APIキー取得後にここに入力するか、設定画面から入力
@@ -258,6 +259,7 @@ const state = {
   isLive: false,
   loading: false,
   companyId: CONFIG.getCompanyId(),
+  isAdmin: CONFIG.isAdmin(),
   companyName: localStorage.getItem('company_name_' + CONFIG.getCompanyId()) || 'デモ会社',
 };
 
@@ -392,8 +394,8 @@ function renderCard(b) {
   const details = [];
   if (b.checkout) details.push(`<span class="detail-pill"><span class="icon">🚪</span>OUT ${b.checkout}</span>`);
   if (b.checkin) details.push(`<span class="detail-pill"><span class="icon">🔑</span>IN ${b.checkin}</span>`);
-  details.push(`<span class="detail-pill"><span class="icon">🛁</span>タオル ${b.towels}枚</span>`);
-  details.push(`<span class="detail-pill"><span class="icon">🛏</span>リネン ${b.linen}セット</span>`);
+  // 同日にチェックインがある場合はバッジで表示（typeがcheckoutの場合）
+  if (b.type === 'checkout' && b.samedayCheckin) details.push(`<span class="detail-pill" style="background:var(--accent-light);color:var(--accent);">次のゲスト IN ${b.sameday_checkin_time || '15:00'}</span>`);
 
   return `<div class="prop-card ${checked ? 'is-done' : ''}" id="card-${ck}">
   <div class="prop-card-body">
@@ -456,24 +458,32 @@ function renderTodayView() {
     </div>`;
 
   // Stats
-  let html = `<div class="stats-bar">
-    <div class="stat-card"><div class="stat-num pending">${pending.length}</div><div class="stat-label">清掃待ち</div></div>
-    <div class="stat-card"><div class="stat-num done">${done.length}</div><div class="stat-label">清掃完了</div></div>
-    <div class="stat-card"><div class="stat-num total">${bookings.length}</div><div class="stat-label">合計</div></div>
+  // stats用（cleaningBookingsを使うがここで定義は後）
+  let html = `<div class="stats-bar" id="stats-bar-placeholder"></div>`;
+
+  // stats更新
+  document.getElementById('stats-bar-placeholder').outerHTML = `<div class="stats-bar">
+    <div class="stat-card"><div class="stat-num pending">${pendingCleaning.length}</div><div class="stat-label">清掃待ち</div></div>
+    <div class="stat-card"><div class="stat-num done">${doneCleaning.length}</div><div class="stat-label">清掃完了</div></div>
+    <div class="stat-card"><div class="stat-num total">${cleaningBookings.length}</div><div class="stat-label">合計</div></div>
   </div>`;
+  // チェックインのみは非表示（清掃不要のため）
+  const cleaningBookings = bookings.filter(b => b.type !== 'checkin');
+  const pendingCleaning = cleaningBookings.filter(b => !state.checks[checkKey(b.propId, date)]);
+  const doneCleaning = cleaningBookings.filter(b => state.checks[checkKey(b.propId, date)]);
 
   // Cards
   html += '<div class="section">';
-  if (bookings.length === 0) {
+  if (cleaningBookings.length === 0) {
     html += '<div class="empty"><div class="empty-icon">🌿</div><div class="empty-text">本日の清掃はありません</div></div>';
   } else {
-    if (pending.length > 0) {
-      html += `<div class="section-header"><div class="section-dot pending"></div><span class="section-title-text">清掃待ち</span><span class="section-count">${pending.length}件</span></div>`;
-      html += pending.map(renderCard).join('');
+    if (pendingCleaning.length > 0) {
+      html += `<div class="section-header"><div class="section-dot pending"></div><span class="section-title-text">清掃待ち</span><span class="section-count">${pendingCleaning.length}件</span></div>`;
+      html += pendingCleaning.map(renderCard).join('');
     }
-    if (done.length > 0) {
-      html += `<div class="section-header" style="margin-top:20px;"><div class="section-dot done"></div><span class="section-title-text">清掃完了</span><span class="section-count">${done.length}件</span></div>`;
-      html += done.map(renderCard).join('');
+    if (doneCleaning.length > 0) {
+      html += `<div class="section-header" style="margin-top:20px;"><div class="section-dot done"></div><span class="section-title-text">清掃完了</span><span class="section-count">${doneCleaning.length}件</span></div>`;
+      html += doneCleaning.map(renderCard).join('');
     }
   }
   html += '</div>';
@@ -512,39 +522,53 @@ function renderCalendarView() {
   });
   html += '</div>';
 
-  // Grid
+  // 帯表示カレンダー
   const weekdays = ['日','月','火','水','木','金','土'];
-  html += '<div class="cal-grid">';
-  weekdays.forEach((d, i) => {
-    const cls = i === 0 ? 'sun' : i === 6 ? 'sat' : '';
-    html += `<div class="cal-weekday ${cls}">${d}</div>`;
-  });
-  for (let i = 0; i < firstDay; i++) html += '<div></div>';
+  // ヘッダー行（日付）
+  html += '<div style="overflow-x:auto;">';
+  html += '<table style="width:100%;border-collapse:collapse;table-layout:fixed;min-width:600px;">';
+  // 週ヘッダー
+  html += '<thead><tr><td style="width:90px;padding:4px 6px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border);">施設</td>';
   for (let d = 1; d <= daysInMonth; d++) {
     const dt = new Date(y, mo, d);
-    const bks = getBookingsForDate(dt).filter(b => propId === null || b.propId == propId);
     const isT = fmtDate(dt) === fmtDate(TODAY);
-    const isSel = fmtDate(dt) === fmtDate(state.date);
-    const allDone = bks.length > 0 && bks.every(b => !!state.checks[checkKey(b.propId, dt)]);
-    let dots = '';
-    if (allDone) {
-      dots = '<div class="cal-dots"><div class="cal-dot" style="background:var(--green)"></div></div>';
-    } else if (bks.length > 0) {
-      const hasCo = bks.some(b => b.type === 'checkout' || b.type === 'both');
-      const hasCi = bks.some(b => b.type === 'checkin' || b.type === 'both');
-      dots = '<div class="cal-dots">';
-      if (hasCo) dots += '<div class="cal-dot" style="background:var(--amber)"></div>';
-      if (hasCi) dots += '<div class="cal-dot" style="background:var(--accent)"></div>';
-      dots += '</div>';
-    }
-    html += `<div class="cal-cell ${isT?'today':''} ${!isT&&isSel?'selected':''}" onclick="selectCalDate(${y},${mo},${d})">
-      <div class="cal-date">${d}</div>${dots}</div>`;
+    const w = ['日','月','火','水','木','金','土'][dt.getDay()];
+    const wColor = dt.getDay()===0?'#C0392B':dt.getDay()===6?'#2C5F8A':'var(--text3)';
+    html += `<td style="text-align:center;padding:3px 1px;font-size:10px;color:${wColor};border-bottom:1px solid var(--border);${isT?'background:var(--accent);color:white;border-radius:4px 4px 0 0;':''}">${d}<br>${w}</td>`;
   }
-  html += '</div>';
-  html += `<div class="cal-legend">
-    <span><div class="dot" style="background:var(--amber)"></div>チェックアウト</span>
-    <span><div class="dot" style="background:var(--accent)"></div>チェックイン</span>
-    <span><div class="dot" style="background:var(--green)"></div>完了</span>
+  html += '</tr></thead><tbody>';
+
+  // 施設ごとの行
+  const rowProps = allProps.filter(p => propId === null || String(p.id) === String(propId));
+  rowProps.forEach(p => {
+    html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;" title="${p.name}">${p.name}</td>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(y, mo, d);
+      const isT = fmtDate(dt) === fmtDate(TODAY);
+      const dayBks = getBookingsForDate(dt).filter(b => String(b.propId) === String(p.id));
+      const hasCo = dayBks.some(b => b.type === 'checkout' || b.type === 'both');
+      const hasCi = dayBks.some(b => b.type === 'checkin' || b.type === 'both');
+      const allDone = dayBks.length > 0 && dayBks.every(b => !!state.checks[checkKey(b.propId, dt)]);
+      let bg = isT ? 'rgba(44,95,138,0.08)' : 'transparent';
+      let inner = '';
+      if (allDone) {
+        inner = `<div style="margin:1px;height:18px;background:#1D9E75;border-radius:3px;"></div>`;
+      } else if (hasCo && hasCi) {
+        inner = `<div style="margin:1px;height:18px;background:linear-gradient(90deg,#9A5E10 50%,#2C5F8A 50%);border-radius:3px;" title="アウト＆イン" onclick="selectCalDate(${y},${mo},${d})"></div>`;
+      } else if (hasCo) {
+        inner = `<div style="margin:1px;height:18px;background:#9A5E10;border-radius:3px;" title="チェックアウト"></div>`;
+      } else if (hasCi) {
+        inner = `<div style="margin:1px;height:18px;background:#2C5F8A;border-radius:3px;" title="チェックイン"></div>`;
+      }
+      html += `<td style="padding:2px 1px;border-bottom:1px solid var(--border);background:${bg};cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})">${inner}</td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += `<div class="cal-legend" style="margin-top:10px;">
+    <span><div class="dot" style="background:#9A5E10"></div>チェックアウト</span>
+    <span><div class="dot" style="background:#2C5F8A"></div>チェックイン</span>
+    <span><div class="dot" style="background:#1D9E75"></div>完了</span>
   </div>`;
   html += '</div>';
   document.getElementById('main-area').innerHTML = html;
@@ -732,8 +756,8 @@ function renderTabBar() {
   const tabs = [
     { id: 'today', icon: '🧹', label: '今日' },
     { id: 'calendar', icon: '📅', label: 'カレンダー' },
-    { id: 'settings', icon: '⚙️', label: '設定' },
   ];
+  if (state.isAdmin) tabs.push({ id: 'settings', icon: '⚙️', label: '設定' });
   document.getElementById('tabbar').innerHTML = tabs.map(t =>
     `<button class="tab-item ${state.view === t.id ? 'active' : ''}" onclick="setView('${t.id}')">
       <div class="tab-icon">${t.icon}</div>
