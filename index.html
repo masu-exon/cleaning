@@ -548,14 +548,40 @@ function renderCalendarView() {
   }
   html += '</tr></thead><tbody>';
 
-  // 施設ごとの行
-  const rowProps = activeProps.filter(p => propId === null || String(p.id) === String(propId));
-  rowProps.forEach(p => {
-    html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;" title="${p.name}">${p.name}</td>`;
+  // 部屋（roomId）ごとの行を構築
+  // bookingsCacheから使われているroomIdを収集
+  const roomRows = [];
+  const seenRoomIds = new Set();
+  Object.values(state.bookingsCache).flat().forEach(b => {
+    const rid = String(b.roomId);
+    if (!seenRoomIds.has(rid)) {
+      seenRoomIds.add(rid);
+      const rInfo = state.roomMap[rid] || {};
+      // unitNameが複数行の場合は各ユニットを展開
+      const unitNames = rInfo.unitName ? rInfo.unitName.split(/\r?\n/).map(s=>s.trim()).filter(s=>s) : [''];
+      unitNames.forEach((uname, idx) => {
+        roomRows.push({
+          roomId: rid,
+          unitIdx: idx,
+          displayName: uname || rInfo.propName || ('部屋' + rid),
+          propName: rInfo.propName || '',
+        });
+      });
+    }
+  });
+  // フィルター適用
+  const filteredRows = propId === null ? roomRows : roomRows.filter(r => {
+    const rInfo = state.roomMap[r.roomId] || {};
+    return String(rInfo.propId) === String(propId) || 
+           Object.values(state.bookingsCache).flat().some(b => String(b.roomId) === r.roomId && String(b.propId) === String(propId));
+  });
+
+  filteredRows.forEach(row => {
+    html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;" title="${row.displayName}">${row.displayName}</td>`;
     for (let d = 1; d <= daysInMonth; d++) {
       const dt = new Date(y, mo, d);
       const isT = fmtDate(dt) === fmtDate(TODAY);
-      const dayBks = getBookingsForDate(dt).filter(b => String(b.propId) === String(p.id));
+      const dayBks = getBookingsForDate(dt).filter(b => String(b.roomId) === row.roomId && parseInt(b.unitId||'1')-1 === row.unitIdx);
       const hasCo = dayBks.some(b => b.type === 'checkout' || b.type === 'both');
       const hasCi = dayBks.some(b => b.type === 'checkin' || b.type === 'both');
       const allDone = dayBks.length > 0 && dayBks.every(b => !!state.checks[checkKey(b.propId, dt)]);
