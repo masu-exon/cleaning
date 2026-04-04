@@ -561,16 +561,35 @@ function renderCalendarView() {
       const allDone = dayBks.length > 0 && dayBks.every(b => !!state.checks[checkKey(b.propId, dt)]);
       let bg = isT ? 'rgba(44,95,138,0.08)' : 'transparent';
       let inner = '';
-      if (allDone) {
-        inner = `<div style="margin:1px;height:18px;background:#1D9E75;border-radius:3px;"></div>`;
-      } else if (hasCo && hasCi) {
-        inner = `<div style="margin:1px;height:18px;background:linear-gradient(90deg,#9A5E10 50%,#2C5F8A 50%);border-radius:3px;" title="アウト＆イン" onclick="selectCalDate(${y},${mo},${d})"></div>`;
-      } else if (hasCo) {
-        inner = `<div style="margin:1px;height:18px;background:#9A5E10;border-radius:3px;" title="チェックアウト"></div>`;
-      } else if (hasCi) {
-        inner = `<div style="margin:1px;height:18px;background:#2C5F8A;border-radius:3px;" title="チェックイン"></div>`;
+      if (dayBks.length > 0) {
+        // チェックアウトの予約（ゲスト名を表示）
+        const coBook = dayBks.find(b => b.type === 'checkout' || b.type === 'both');
+        const ciBook = dayBks.find(b => b.type === 'checkin');
+        if (allDone) {
+          const gName = coBook ? coBook.guest.replace('様','') : '';
+          inner = `<div style="margin:1px;height:22px;background:#1D9E75;border-radius:3px;display:flex;align-items:center;padding:0 4px;overflow:hidden;">
+            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">✓ ${gName}</span></div>`;
+        } else if (coBook && ciBook) {
+          // 同日アウト＆イン：左半分アウト、右半分イン
+          const gOut = coBook.guest.replace('様','');
+          const gIn = ciBook.guest.replace('様','');
+          inner = `<div style="margin:1px;height:22px;display:flex;border-radius:3px;overflow:hidden;">
+            <div style="flex:1;background:#9A5E10;display:flex;align-items:center;padding:0 3px;overflow:hidden;">
+              <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;">${gOut}</span></div>
+            <div style="flex:1;background:#2C5F8A;display:flex;align-items:center;padding:0 3px;overflow:hidden;">
+              <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;">${gIn}</span></div>
+          </div>`;
+        } else if (coBook) {
+          const gName = coBook.guest.replace('様','');
+          inner = `<div style="margin:1px;height:22px;background:#9A5E10;border-radius:3px;display:flex;align-items:center;padding:0 4px;overflow:hidden;">
+            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${gName}</span></div>`;
+        } else if (ciBook) {
+          const gName = ciBook.guest.replace('様','');
+          inner = `<div style="margin:1px;height:22px;background:#2C5F8A;border-radius:3px;display:flex;align-items:center;padding:0 4px;overflow:hidden;">
+            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${gName}</span></div>`;
+        }
       }
-      html += `<td style="padding:2px 1px;border-bottom:1px solid var(--border);background:${bg};cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})">${inner}</td>`;
+      html += `<td style="padding:2px 1px;border-bottom:1px solid var(--border);background:${bg};cursor:pointer;min-width:28px;" onclick="selectCalDate(${y},${mo},${d})">${inner}</td>`;
     }
     html += '</tr>';
   });
