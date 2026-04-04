@@ -251,6 +251,7 @@ const state = {
   memoOpen: {},
   apiKey: CONFIG.API_KEY,
   propKey: localStorage.getItem('beds24_prop_key') || '',
+  roomMap: {}, // roomId -> unitNames
   apiStatus: '',
   bookingsCache: {},
   properties: [],
@@ -327,23 +328,28 @@ function convertV1Booking(b, propName) {
   const depDate = b.lastNight;
   const guestName = ((b.guestFirstName || '') + ' ' + (b.guestName || '')).trim() + '様';
   const adults = parseInt(b.numAdult) || 1;
+  // roomMapからユニット名を取得
+  const roomInfo = state.roomMap[String(b.roomId)] || {};
+  const displayName = roomInfo.propName
+    ? (roomInfo.unitName ? roomInfo.propName + '　' + roomInfo.unitName : roomInfo.propName)
+    : (propName || ('施設' + b.propId));
   const results = [];
   if (arrDate === depDate) {
     results.push({
-      propId: b.propId, propName: propName || ('施設' + b.propId),
+      propId: b.propId, propName: displayName,
       date: depDate, type: 'both', label: 'アウト＆イン',
       guest: guestName, checkout: '11:00', checkin: '15:00',
       towels: adults, linen: Math.ceil(adults / 2),
     });
   } else {
     results.push({
-      propId: b.propId, propName: propName || ('施設' + b.propId),
+      propId: b.propId, propName: displayName,
       date: depDate, type: 'checkout', label: 'チェックアウト',
       guest: guestName, checkout: '11:00', checkin: null,
       towels: adults, linen: Math.ceil(adults / 2),
     });
     results.push({
-      propId: b.propId, propName: propName || ('施設' + b.propId),
+      propId: b.propId, propName: displayName,
       date: arrDate, type: 'checkin', label: 'チェックイン',
       guest: guestName, checkout: null, checkin: '15:00',
       towels: adults, linen: Math.ceil(adults / 2),
@@ -656,6 +662,12 @@ async function connectApi() {
       localStorage.setItem('beds24_prop_key', propKey);
       const props = Array.isArray(data) ? data : [data];
       state.properties = props.map(p => ({ id: String(p.propId), name: p.name || ('施設' + p.propId) }));
+      state.roomMap = {};
+      props.forEach(p => {
+        if (p.roomTypes) p.roomTypes.forEach(r => {
+          state.roomMap[String(r.roomId)] = { propName: p.name, unitName: r.unitNames || r.name || '' };
+        });
+      });
       await loadLiveBookings();
       msg.innerHTML = '<div class="settings-status ok">✓ 接続成功！予約データを取得しました</div>';
       render();
@@ -739,6 +751,13 @@ async function autoConnect() {
       state.propKey = propKey;
       state.isLive = true;
       state.properties = data.map(p => ({ id: String(p.propId), name: p.name || ('施設' + p.propId) }));
+      // roomId -> {propName, unitName} のマップを構築
+      state.roomMap = {};
+      data.forEach(p => {
+        if (p.roomTypes) p.roomTypes.forEach(r => {
+          state.roomMap[String(r.roomId)] = { propName: p.name, unitName: r.unitNames || r.name || '' };
+        });
+      });
       await loadLiveBookings();
     }
   } catch(e) {
