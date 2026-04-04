@@ -352,14 +352,14 @@ function convertV1Booking(b, propName) {
     results.push({
       propId: b.propId, propName: displayName,
       date: depDate, type: 'both', label: 'アウト＆イン',
-      guest: guestName, checkout: '11:00', checkin: '15:00',
+      guest: guestName, checkout: '10:00', checkin: '15:00',
       towels: adults, linen: Math.ceil(adults / 2),
     });
   } else {
     results.push({
       propId: b.propId, propName: displayName,
       date: depDate, type: 'checkout', label: 'チェックアウト',
-      guest: guestName, checkout: '11:00', checkin: null,
+      guest: guestName, checkout: '10:00', checkin: null,
       towels: adults, linen: Math.ceil(adults / 2),
     });
     results.push({
@@ -522,6 +522,16 @@ function renderCalendarView() {
   });
   html += '</div>';
 
+  // 表示対象月の予約がある施設だけに絞る
+  const activeProps = allProps.filter(p => {
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(y, mo, d);
+      const bks = getBookingsForDate(dt).filter(b => String(b.propId) === String(p.id));
+      if (bks.length > 0) return true;
+    }
+    return false;
+  });
+
   // 帯表示カレンダー
   const weekdays = ['日','月','火','水','木','金','土'];
   // ヘッダー行（日付）
@@ -539,7 +549,7 @@ function renderCalendarView() {
   html += '</tr></thead><tbody>';
 
   // 施設ごとの行
-  const rowProps = allProps.filter(p => propId === null || String(p.id) === String(propId));
+  const rowProps = activeProps.filter(p => propId === null || String(p.id) === String(propId));
   rowProps.forEach(p => {
     html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;" title="${p.name}">${p.name}</td>`;
     for (let d = 1; d <= daysInMonth; d++) {
@@ -639,7 +649,15 @@ function renderSettingsView() {
 // Actions
 // ============================================================
 function getAllProperties() {
-  if (state.isLive && state.properties.length > 0) return state.properties;
+  if (state.isLive) {
+    // 予約データに実際に含まれるpropIdだけに絞る
+    if (Object.keys(state.bookingsCache).length > 0) {
+      const propMap = {};
+      Object.values(state.bookingsCache).flat().forEach(b => { propMap[String(b.propId)] = b.propName; });
+      return Object.entries(propMap).map(([id, name]) => ({ id, name }));
+    }
+    return state.properties;
+  }
   if (!DEMO_BOOKINGS) DEMO_BOOKINGS = makeDemoBookings();
   const propMap = {};
   Object.values(DEMO_BOOKINGS).flat().forEach(b => { propMap[b.propId] = b.propName; });
