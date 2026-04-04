@@ -325,7 +325,10 @@ async function fetchBookings(apiKey, propKey, fromDate, toDate) {
 
 function convertV1Booking(b, propName) {
   const arrDate = b.firstNight;
-  const depDate = b.lastNight;
+  // lastNightは最終宿泊日なのでチェックアウトは翌日
+  const lastNightDate = new Date(b.lastNight + 'T00:00:00');
+  lastNightDate.setDate(lastNightDate.getDate() + 1);
+  const depDate = lastNightDate.getFullYear() + '-' + String(lastNightDate.getMonth()+1).padStart(2,'0') + '-' + String(lastNightDate.getDate()).padStart(2,'0');
   const guestName = ((b.guestFirstName || '') + ' ' + (b.guestName || '')).trim() + '様';
   const adults = parseInt(b.numAdult) || 1;
   // roomMapからユニット名を取得
