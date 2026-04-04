@@ -350,20 +350,20 @@ function convertV1Booking(b, propName) {
   const results = [];
   if (arrDate === depDate) {
     results.push({
-      propId: b.propId, propName: displayName,
+      propId: b.propId, propName: displayName, roomId: b.roomId, unitId: b.unitId,
       date: depDate, type: 'both', label: 'アウト＆イン',
       guest: guestName, checkout: '10:00', checkin: '15:00',
       towels: adults, linen: Math.ceil(adults / 2),
     });
   } else {
     results.push({
-      propId: b.propId, propName: displayName,
+      propId: b.propId, propName: displayName, roomId: b.roomId, unitId: b.unitId,
       date: depDate, type: 'checkout', label: 'チェックアウト',
       guest: guestName, checkout: '10:00', checkin: null,
       towels: adults, linen: Math.ceil(adults / 2),
     });
     results.push({
-      propId: b.propId, propName: displayName,
+      propId: b.propId, propName: displayName, roomId: b.roomId, unitId: b.unitId,
       date: arrDate, type: 'checkin', label: 'チェックイン',
       guest: guestName, checkout: null, checkin: '15:00',
       towels: adults, linen: Math.ceil(adults / 2),
@@ -548,40 +548,29 @@ function renderCalendarView() {
   }
   html += '</tr></thead><tbody>';
 
-  // 部屋（roomId）ごとの行を構築
-  // bookingsCacheから使われているroomIdを収集
+  // 部屋（propName）ごとの行を構築（bookingsCacheのpropNameを使う）
   const roomRows = [];
-  const seenRoomIds = new Set();
+  const seenNames = new Set();
   Object.values(state.bookingsCache).flat().forEach(b => {
-    const rid = String(b.roomId);
-    if (!seenRoomIds.has(rid)) {
-      seenRoomIds.add(rid);
-      const rInfo = state.roomMap[rid] || {};
-      // unitNameが複数行の場合は各ユニットを展開
-      const unitNames = rInfo.unitName ? rInfo.unitName.split(/\r?\n/).map(s=>s.trim()).filter(s=>s) : [''];
-      unitNames.forEach((uname, idx) => {
-        roomRows.push({
-          roomId: rid,
-          unitIdx: idx,
-          displayName: uname || rInfo.propName || ('部屋' + rid),
-          propName: rInfo.propName || '',
-        });
-      });
+    if (!seenNames.has(b.propName)) {
+      seenNames.add(b.propName);
+      // unitName部分だけ取り出す（「Lakeside Retreat　1階」→「1階」）
+      const parts = b.propName.split(/[　\s]+/);
+      const shortName = parts.length > 1 ? parts[parts.length - 1] : b.propName;
+      roomRows.push({ propName: b.propName, shortName });
     }
   });
-  // フィルター適用
-  const filteredRows = propId === null ? roomRows : roomRows.filter(r => {
-    const rInfo = state.roomMap[r.roomId] || {};
-    return String(rInfo.propId) === String(propId) || 
-           Object.values(state.bookingsCache).flat().some(b => String(b.roomId) === r.roomId && String(b.propId) === String(propId));
-  });
+
+  let filteredRows = propId === null ? roomRows : roomRows.filter(r =>
+    Object.values(state.bookingsCache).flat().some(b => b.propName === r.propName && String(b.propId) === String(propId))
+  );
 
   filteredRows.forEach(row => {
-    html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;" title="${row.displayName}">${row.displayName}</td>`;
+    html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;" title="${row.propName}">${row.shortName}</td>`;
     for (let d = 1; d <= daysInMonth; d++) {
       const dt = new Date(y, mo, d);
       const isT = fmtDate(dt) === fmtDate(TODAY);
-      const dayBks = getBookingsForDate(dt).filter(b => String(b.roomId) === row.roomId && parseInt(b.unitId||'1')-1 === row.unitIdx);
+      const dayBks = getBookingsForDate(dt).filter(b => b.propName === row.propName);
       const hasCo = dayBks.some(b => b.type === 'checkout' || b.type === 'both');
       const hasCi = dayBks.some(b => b.type === 'checkin' || b.type === 'both');
       const allDone = dayBks.length > 0 && dayBks.every(b => !!state.checks[checkKey(b.propId, dt)]);
