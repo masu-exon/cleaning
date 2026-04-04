@@ -458,19 +458,19 @@ function renderTodayView() {
     </div>`;
 
   // Stats
-  // stats用（cleaningBookingsを使うがここで定義は後）
-  let html = `<div class="stats-bar" id="stats-bar-placeholder"></div>`;
+  let html = '';
 
-  // stats更新
-  document.getElementById('stats-bar-placeholder').outerHTML = `<div class="stats-bar">
-    <div class="stat-card"><div class="stat-num pending">${pendingCleaning.length}</div><div class="stat-label">清掃待ち</div></div>
-    <div class="stat-card"><div class="stat-num done">${doneCleaning.length}</div><div class="stat-label">清掃完了</div></div>
-    <div class="stat-card"><div class="stat-num total">${cleaningBookings.length}</div><div class="stat-label">合計</div></div>
-  </div>`;
   // チェックインのみは非表示（清掃不要のため）
   const cleaningBookings = bookings.filter(b => b.type !== 'checkin');
   const pendingCleaning = cleaningBookings.filter(b => !state.checks[checkKey(b.propId, date)]);
   const doneCleaning = cleaningBookings.filter(b => state.checks[checkKey(b.propId, date)]);
+
+  // Stats
+  html += `<div class="stats-bar">
+    <div class="stat-card"><div class="stat-num pending">${pendingCleaning.length}</div><div class="stat-label">清掃待ち</div></div>
+    <div class="stat-card"><div class="stat-num done">${doneCleaning.length}</div><div class="stat-label">清掃完了</div></div>
+    <div class="stat-card"><div class="stat-num total">${cleaningBookings.length}</div><div class="stat-label">合計</div></div>
+  </div>`;
 
   // Cards
   html += '<div class="section">';
