@@ -330,9 +330,18 @@ function convertV1Booking(b, propName) {
   const adults = parseInt(b.numAdult) || 1;
   // roomMapからユニット名を取得
   const roomInfo = state.roomMap[String(b.roomId)] || {};
-  const displayName = roomInfo.propName
-    ? (roomInfo.unitName ? roomInfo.propName + '　' + roomInfo.unitName : roomInfo.propName)
-    : (propName || ('施設' + b.propId));
+  let displayName;
+  if (roomInfo.propName) {
+    // unitNameが複数行の場合はunitId(1始まり)で該当部屋名を取得
+    const unitNames = roomInfo.unitName ? roomInfo.unitName.split(/\r?\n/).map(s => s.trim()).filter(s => s) : [];
+    const unitIdx = parseInt(b.unitId || '1') - 1;
+    const unitName = unitNames.length > 1
+      ? (unitNames[unitIdx] || unitNames[0] || '')
+      : (unitNames[0] || '');
+    displayName = unitName ? roomInfo.propName + '　' + unitName : roomInfo.propName;
+  } else {
+    displayName = propName || ('施設' + b.propId);
+  }
   const results = [];
   if (arrDate === depDate) {
     results.push({
