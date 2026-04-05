@@ -246,6 +246,7 @@ const state = {
   view: 'today',
   date: new Date(TODAY),
   calMonth: new Date(TODAY.getFullYear(), TODAY.getMonth(), 1),
+  calWeekStart: new Date(TODAY),
   calFilter: 'all',
   checks: JSON.parse(localStorage.getItem('checks') || '{}'),
   memos: JSON.parse(localStorage.getItem('memos') || '{}'),
@@ -499,54 +500,47 @@ function renderCalendarView() {
       </div>
     </div>`;
 
-  const cm = state.calMonth;
-  const y = cm.getFullYear(), mo = cm.getMonth();
-  const firstDay = new Date(y, mo, 1).getDay();
-  const daysInMonth = new Date(y, mo+1, 0).getDate();
-  const propId = state.calFilter === 'all' ? null : parseInt(state.calFilter);
-
-  // Get all properties for filter
+  const propId = state.calFilter === 'all' ? null : state.calFilter;
   const allProps = getAllProperties();
+
+  // 7日間表示
+  const ws = new Date(state.calWeekStart); ws.setHours(0,0,0,0);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ws); d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+  const startLabel = (ws.getMonth()+1) + '月' + ws.getDate() + '日';
+  const endD = days[6];
+  const endLabel = (endD.getMonth()+1) + '月' + endD.getDate() + '日';
 
   let html = '<div class="calendar-wrap">';
   html += `<div class="month-nav">
-    <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
-    <span class="month-title">${y}年${mo+1}月</span>
-    <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
+    <button class="month-nav-btn" onclick="changeWeek(-7)">‹</button>
+    <span class="month-title" style="font-size:14px;">${startLabel}〜${endLabel}</span>
+    <button class="month-nav-btn" onclick="changeWeek(7)">›</button>
   </div>`;
 
   // Filter chips
   html += '<div class="cal-filter"><button class="cal-chip ' + (state.calFilter === 'all' ? 'active' : '') + '" onclick="setCalFilter(\'all\')">すべて</button>';
   allProps.forEach(p => {
-    html += `<button class="cal-chip ${state.calFilter == p.id ? 'active' : ''}" onclick="setCalFilter(${p.id})">${p.name}</button>`;
+    html += `<button class="cal-chip ${state.calFilter == p.id ? 'active' : ''}" onclick="setCalFilter('${p.id}')">${p.name}</button>`;
   });
   html += '</div>';
 
-  // 表示対象月の予約がある施設だけに絞る
-  const activeProps = allProps.filter(p => {
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dt = new Date(y, mo, d);
-      const bks = getBookingsForDate(dt).filter(b => String(b.propId) === String(p.id));
-      if (bks.length > 0) return true;
-    }
-    return false;
-  });
-
-  // 帯表示カレンダー
-  const weekdays = ['日','月','火','水','木','金','土'];
-  // ヘッダー行（日付）
+  // 7日間テーブルヘッダー
   html += '<div style="overflow-x:auto;">';
-  html += '<table style="width:100%;border-collapse:collapse;table-layout:fixed;min-width:600px;">';
-  // 週ヘッダー
-  html += '<thead><tr><td style="width:90px;padding:4px 6px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border);">施設</td>';
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dt = new Date(y, mo, d);
+  html += '<table style="width:100%;border-collapse:collapse;">';
+  html += '<thead><tr><td style="width:80px;padding:4px 6px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border);">部屋</td>';
+  days.forEach(dt => {
     const isT = fmtDate(dt) === fmtDate(TODAY);
     const w = ['日','月','火','水','木','金','土'][dt.getDay()];
     const wColor = dt.getDay()===0?'#C0392B':dt.getDay()===6?'#2C5F8A':'var(--text3)';
-    html += `<td style="text-align:center;padding:3px 1px;font-size:10px;color:${wColor};border-bottom:1px solid var(--border);${isT?'background:var(--accent);color:white;border-radius:4px 4px 0 0;':''}">${d}<br>${w}</td>`;
-  }
+    const dayLabel = (dt.getMonth()+1)+'/'+dt.getDate();
+    html += `<td style="text-align:center;padding:4px 2px;font-size:11px;color:${isT?'white':wColor};border-bottom:1px solid var(--border);min-width:40px;${isT?'background:var(--accent);border-radius:4px 4px 0 0;':''}">${dayLabel}<br>${w}</td>`;
+  });
   html += '</tr></thead><tbody>';
+
 
   // 部屋（propName）ごとの行を構築（bookingsCacheのpropNameを使う）
   const roomRows = [];
@@ -588,47 +582,61 @@ function renderCalendarView() {
 
     html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;position:sticky;left:0;background:var(--surface);z-index:1;" title="${row.propName}">${row.shortName}</td>`;
 
-    let d = 1;
-    while (d <= daysInMonth) {
-      const dt = new Date(y, mo, d);
+    // 7日間分のセルを描画
+    let di = 0;
+    while (di < days.length) {
+      const dt = days[di];
       const ds = fmtDate(dt);
       const isT = fmtDate(dt) === fmtDate(TODAY);
       const bg = isT ? 'rgba(44,95,138,0.08)' : 'transparent';
+      const y2 = dt.getFullYear(), mo2 = dt.getMonth(), d2 = dt.getDate();
 
-      // この日からstayが始まるか
       const stay = stays.find(s => s.ciDate === ds);
       if (stay) {
-        const coD = new Date(stay.coDate + 'T00:00:00');
-        const endDay = coD.getMonth() === mo ? coD.getDate() : daysInMonth;
-        const span = Math.max(1, endDay - d + 1);
+        // チェックイン日：残り表示日数分までspan
+        const coD = new Date(stay.coDate+'T00:00:00');
+        let span = 1;
+        for (let j = di+1; j < days.length; j++) {
+          if (days[j] < coD) span++;
+          else break;
+        }
+        // チェックアウト日も含める（最終日）
+        if (di + span < days.length && fmtDate(days[di+span]) === stay.coDate) span++;
+        span = Math.min(span, days.length - di);
         const color = stay.isDone ? '#1D9E75' : '#2C5F8A';
         const gName = stay.guest.replace('様','');
-        html += `<td colspan="${span}" style="padding:2px 2px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})">
-          <div style="height:22px;background:${color};border-radius:3px;display:flex;align-items:center;padding:0 6px;overflow:hidden;">
-            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${gName}</span>
+        html += `<td colspan="${span}" style="padding:2px 3px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y2},${mo2},${d2})">
+          <div style="height:28px;background:${color};border-radius:4px;display:flex;align-items:center;padding:0 8px;overflow:hidden;">
+            <span style="font-size:11px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;">${gName}</span>
           </div></td>`;
-        d += span;
+        di += span;
       } else {
-        // 月途中から始まる（前月からの宿泊）
         const midStay = stays.find(s => {
           const ci = new Date(s.ciDate+'T00:00:00');
           const co = new Date(s.coDate+'T00:00:00');
-          return ci < dt && co >= dt;
+          return ci < dt && co > dt;
         });
-        if (midStay) {
-          const coD = new Date(midStay.coDate+'T00:00:00');
-          const endDay = coD.getMonth() === mo ? coD.getDate() : daysInMonth;
-          const span = Math.max(1, endDay - d + 1);
-          const color = midStay.isDone ? '#1D9E75' : '#9A5E10';
-          const gName = midStay.guest.replace('様','');
-          html += `<td colspan="${span}" style="padding:2px 2px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})">
-            <div style="height:22px;background:${color};border-radius:0 3px 3px 0;display:flex;align-items:center;padding:0 6px;overflow:hidden;">
-              <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">…${gName}</span>
+        const coStay = stays.find(s => s.coDate === ds && !stays.find(x => x.ciDate === ds));
+        const activeStay = midStay || coStay;
+        if (activeStay) {
+          const coD = new Date(activeStay.coDate+'T00:00:00');
+          let span = 1;
+          for (let j = di+1; j < days.length; j++) {
+            if (days[j] <= coD) span++;
+            else break;
+          }
+          span = Math.min(span, days.length - di);
+          const color = activeStay.isDone ? '#1D9E75' : '#9A5E10';
+          const gName = activeStay.guest.replace('様','');
+          const isStart = midStay && new Date(activeStay.ciDate+'T00:00:00') < ws;
+          html += `<td colspan="${span}" style="padding:2px 3px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y2},${mo2},${d2})">
+            <div style="height:28px;background:${color};border-radius:${isStart?'0':'4px'} 4px 4px ${isStart?'0':'4px'};display:flex;align-items:center;padding:0 8px;overflow:hidden;">
+              <span style="font-size:11px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;">${isStart?'…':''}${gName}</span>
             </div></td>`;
-          d += span;
+          di += span;
         } else {
-          html += `<td style="padding:2px 1px;border-bottom:1px solid var(--border);background:${bg};min-width:24px;cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})"></td>`;
-          d++;
+          html += `<td style="padding:2px 3px;border-bottom:1px solid var(--border);background:${bg};cursor:pointer;" onclick="selectCalDate(${y2},${mo2},${d2})"></td>`;
+          di++;
         }
       }
     }
@@ -758,6 +766,12 @@ function selectCalDate(y, mo, d) {
   render();
 }
 function setCalFilter(v) { state.calFilter = v; render(); }
+function changeWeek(n) {
+  const d = new Date(state.calWeekStart);
+  d.setDate(d.getDate() + n);
+  state.calWeekStart = d;
+  render();
+}
 
 async function connectApi() {
   const key = document.getElementById('inp-apikey').value.trim();
@@ -795,8 +809,8 @@ async function connectApi() {
 
 async function loadLiveBookings() {
   const today = new Date();
-  const from = new Date(today); from.setDate(from.getDate() - 1);
-  const to = new Date(today); to.setDate(to.getDate() + 60);
+  const from = new Date(today); from.setMonth(from.getMonth() - 3);
+  const to = new Date(today); to.setMonth(to.getMonth() + 3);
   const fmt = d => d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
   const bookings = await fetchBookings(state.apiKey, state.propKey, fmt(from), fmt(to));
   if (Array.isArray(bookings)) {
