@@ -181,16 +181,11 @@
 // 設定
 // ============================================================
 const CONFIG = {
-  // URLパラメータ ?company=xxx から会社名を取得
   getCompanyId: () => new URLSearchParams(location.search).get('company') || 'demo',
   isAdmin: () => new URLSearchParams(location.search).get('admin') === 'true',
-
-  // Beds24 v2 API設定
-  // APIキー取得後にここに入力するか、設定画面から入力
-  API_KEY: localStorage.getItem('beds24_api_key') || '',
-
-  // 会社ごとの施設ID設定（設定画面から変更可能）
-  // 例: { 'company_a': [12345, 67890], 'company_b': [11111] }
+  // URLパラメータからAPIキーを取得（なければlocalStorageから）
+  API_KEY: new URLSearchParams(location.search).get('key') || localStorage.getItem('beds24_api_key') || '',
+  PROP_KEY: new URLSearchParams(location.search).get('prop') || localStorage.getItem('beds24_prop_key') || '',
   getPropertyIds: (companyId) => {
     const saved = localStorage.getItem('prop_ids_' + companyId);
     return saved ? JSON.parse(saved) : [];
@@ -236,6 +231,59 @@ function makeDemoBookings() {
   return bookings;
 }
 
+
+// ============================================================
+// Supabase設定
+// ============================================================
+const SUPABASE_URL = 'https://ujsrfoldztawympkgwkd.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqc3Jmb2xkenRhd3ltcGtnd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzNzQ5MjAsImV4cCI6MjA5MDk1MDkyMH0.uDy1oknEJPWD_Xo1-b9vN6prShed3IzisbvUm1PggNg';
+
+async function sbGet(company_id, data_type) {
+  const url = `${SUPABASE_URL}/rest/v1/cleaning_data?company_id=eq.${encodeURIComponent(company_id)}&data_type=eq.${encodeURIComponent(data_type)}&select=id,value`;
+  const res = await fetch(url, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+  });
+  if (!res.ok) return {};
+  const rows = await res.json();
+  const result = {};
+  rows.forEach(r => { try { result[r.id] = JSON.parse(r.value); } catch(e) { result[r.id] = r.value; } });
+  return result;
+}
+
+async function sbSet(company_id, data_type, id, value) {
+  const url = `${SUPABASE_URL}/rest/v1/cleaning_data`;
+  await fetch(url, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({
+      id: company_id + '_' + data_type + '_' + id,
+      company_id, data_type, value: JSON.stringify(value),
+      updated_at: new Date().toISOString()
+    })
+  });
+}
+
+async function loadFromSupabase() {
+  const cid = state.companyId;
+  try {
+    const [checks, memos] = await Promise.all([
+      sbGet(cid, 'checks'),
+      sbGet(cid, 'memos')
+    ]);
+    // マージ（ローカルより優先）
+    Object.entries(checks).forEach(([k, v]) => { state.checks[k.replace(cid+'_checks_','')] = v; });
+    Object.entries(memos).forEach(([k, v]) => { state.memos[k.replace(cid+'_memos_','')] = v; });
+    saveChecks(); saveMemos();
+  } catch(e) {
+    console.log('Supabase load error:', e);
+  }
+}
+
 // ============================================================
 // State
 // ============================================================
@@ -252,7 +300,7 @@ const state = {
   memos: JSON.parse(localStorage.getItem('memos') || '{}'),
   memoOpen: {},
   apiKey: CONFIG.API_KEY,
-  propKey: localStorage.getItem('beds24_prop_key') || '',
+  propKey: CONFIG.PROP_KEY,
   roomMap: {}, // roomId -> unitNames
   apiStatus: '',
   bookingsCache: {},
@@ -660,7 +708,10 @@ function renderSettingsView() {
 
   const companyId = state.companyId;
   const savedPropIds = CONFIG.getPropertyIds(companyId).join(', ');
-  const currentUrl = location.href.split('?')[0] + '?company=' + companyId;
+  const baseUrl = location.href.split('?')[0];
+  const apiKey = state.apiKey || '';
+  const propKey = localStorage.getItem('beds24_prop_key') || '';
+  const currentUrl = baseUrl + '?company=' + companyId + (apiKey ? '&key=' + apiKey : '') + (propKey ? '&prop=' + propKey : '');
   const allProps = getAllProperties();
 
   let html = '<div class="settings-wrap">';
@@ -737,6 +788,7 @@ function toggleCheck(propId, dateStr) {
   const ck = checkKey(propId, date);
   state.checks[ck] = !state.checks[ck];
   saveChecks();
+  sbSet(state.companyId, 'checks', ck, state.checks[ck]);
   render();
 }
 
@@ -752,6 +804,7 @@ function updateMemo(propId, dateStr, val) {
   const mk = memoKey(propId, date);
   state.memos[mk] = val;
   saveMemos();
+  sbSet(state.companyId, 'memos', mk, val);
 }
 
 function changeDay(n) { state.date = addDays(state.date, n); render(); }
@@ -869,8 +922,8 @@ function render() {
 
 // ページ読み込み時にAPIキーが保存されていれば自動接続
 async function autoConnect() {
-  const key = localStorage.getItem('beds24_api_key') || '';
-  const propKey = localStorage.getItem('beds24_prop_key') || '';
+  const key = CONFIG.API_KEY;
+  const propKey = CONFIG.PROP_KEY;
   if (!key || !propKey) { render(); return; }
   try {
     const data = await fetchProperties(key, propKey);
@@ -879,7 +932,6 @@ async function autoConnect() {
       state.propKey = propKey;
       state.isLive = true;
       state.properties = data.map(p => ({ id: String(p.propId), name: p.name || ('施設' + p.propId) }));
-      // roomId -> {propName, unitName} のマップを構築
       state.roomMap = {};
       data.forEach(p => {
         if (p.roomTypes) p.roomTypes.forEach(r => {
@@ -887,6 +939,7 @@ async function autoConnect() {
         });
       });
       await loadLiveBookings();
+      await loadFromSupabase();
     }
   } catch(e) {
     console.log('自動接続失敗:', e.message);
