@@ -565,46 +565,72 @@ function renderCalendarView() {
     Object.values(state.bookingsCache).flat().some(b => b.propName === r.propName && String(b.propId) === String(propId))
   );
 
+  // 全予約データから宿泊期間を取得してcolspanで帯表示
+  const allBkList = Object.values(state.bookingsCache).flat();
+
   filteredRows.forEach(row => {
-    html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;" title="${row.propName}">${row.shortName}</td>`;
-    for (let d = 1; d <= daysInMonth; d++) {
+    // この部屋の全予約を収集（ゲストごとにCI/CO日を組み合わせ）
+    const rowBks = allBkList.filter(b => b.propName === row.propName);
+    const stays = [];
+    const seenGuests = new Set();
+    rowBks.forEach(b => {
+      if (seenGuests.has(b.guest)) return;
+      seenGuests.add(b.guest);
+      const ciEntry = rowBks.find(x => x.guest === b.guest && (x.type === 'checkin' || x.type === 'both'));
+      const coEntry = rowBks.find(x => x.guest === b.guest && (x.type === 'checkout' || x.type === 'both'));
+      if (coEntry) {
+        const ciDate = ciEntry ? ciEntry.date : coEntry.date;
+        const coDate = coEntry.date;
+        const isDone = !!state.checks[checkKey(coEntry.propId, new Date(coDate+'T00:00:00'))];
+        stays.push({ guest: b.guest, ciDate, coDate, isDone });
+      }
+    });
+
+    html += `<tr><td style="font-size:11px;font-weight:500;padding:4px 6px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;position:sticky;left:0;background:var(--surface);z-index:1;" title="${row.propName}">${row.shortName}</td>`;
+
+    let d = 1;
+    while (d <= daysInMonth) {
       const dt = new Date(y, mo, d);
+      const ds = fmtDate(dt);
       const isT = fmtDate(dt) === fmtDate(TODAY);
-      const dayBks = getBookingsForDate(dt).filter(b => b.propName === row.propName);
-      const hasCo = dayBks.some(b => b.type === 'checkout' || b.type === 'both');
-      const hasCi = dayBks.some(b => b.type === 'checkin' || b.type === 'both');
-      const allDone = dayBks.length > 0 && dayBks.every(b => !!state.checks[checkKey(b.propId, dt)]);
-      let bg = isT ? 'rgba(44,95,138,0.08)' : 'transparent';
-      let inner = '';
-      if (dayBks.length > 0) {
-        // チェックアウトの予約（ゲスト名を表示）
-        const coBook = dayBks.find(b => b.type === 'checkout' || b.type === 'both');
-        const ciBook = dayBks.find(b => b.type === 'checkin');
-        if (allDone) {
-          const gName = coBook ? coBook.guest.replace('様','') : '';
-          inner = `<div style="margin:1px;height:22px;background:#1D9E75;border-radius:3px;display:flex;align-items:center;padding:0 4px;overflow:hidden;">
-            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">✓ ${gName}</span></div>`;
-        } else if (coBook && ciBook) {
-          // 同日アウト＆イン：左半分アウト、右半分イン
-          const gOut = coBook.guest.replace('様','');
-          const gIn = ciBook.guest.replace('様','');
-          inner = `<div style="margin:1px;height:22px;display:flex;border-radius:3px;overflow:hidden;">
-            <div style="flex:1;background:#9A5E10;display:flex;align-items:center;padding:0 3px;overflow:hidden;">
-              <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;">${gOut}</span></div>
-            <div style="flex:1;background:#2C5F8A;display:flex;align-items:center;padding:0 3px;overflow:hidden;">
-              <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;">${gIn}</span></div>
-          </div>`;
-        } else if (coBook) {
-          const gName = coBook.guest.replace('様','');
-          inner = `<div style="margin:1px;height:22px;background:#9A5E10;border-radius:3px;display:flex;align-items:center;padding:0 4px;overflow:hidden;">
-            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${gName}</span></div>`;
-        } else if (ciBook) {
-          const gName = ciBook.guest.replace('様','');
-          inner = `<div style="margin:1px;height:22px;background:#2C5F8A;border-radius:3px;display:flex;align-items:center;padding:0 4px;overflow:hidden;">
-            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${gName}</span></div>`;
+      const bg = isT ? 'rgba(44,95,138,0.08)' : 'transparent';
+
+      // この日からstayが始まるか
+      const stay = stays.find(s => s.ciDate === ds);
+      if (stay) {
+        const coD = new Date(stay.coDate + 'T00:00:00');
+        const endDay = coD.getMonth() === mo ? coD.getDate() : daysInMonth;
+        const span = Math.max(1, endDay - d + 1);
+        const color = stay.isDone ? '#1D9E75' : '#2C5F8A';
+        const gName = stay.guest.replace('様','');
+        html += `<td colspan="${span}" style="padding:2px 2px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})">
+          <div style="height:22px;background:${color};border-radius:3px;display:flex;align-items:center;padding:0 6px;overflow:hidden;">
+            <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${gName}</span>
+          </div></td>`;
+        d += span;
+      } else {
+        // 月途中から始まる（前月からの宿泊）
+        const midStay = stays.find(s => {
+          const ci = new Date(s.ciDate+'T00:00:00');
+          const co = new Date(s.coDate+'T00:00:00');
+          return ci < dt && co >= dt;
+        });
+        if (midStay) {
+          const coD = new Date(midStay.coDate+'T00:00:00');
+          const endDay = coD.getMonth() === mo ? coD.getDate() : daysInMonth;
+          const span = Math.max(1, endDay - d + 1);
+          const color = midStay.isDone ? '#1D9E75' : '#9A5E10';
+          const gName = midStay.guest.replace('様','');
+          html += `<td colspan="${span}" style="padding:2px 2px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})">
+            <div style="height:22px;background:${color};border-radius:0 3px 3px 0;display:flex;align-items:center;padding:0 6px;overflow:hidden;">
+              <span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">…${gName}</span>
+            </div></td>`;
+          d += span;
+        } else {
+          html += `<td style="padding:2px 1px;border-bottom:1px solid var(--border);background:${bg};min-width:24px;cursor:pointer;" onclick="selectCalDate(${y},${mo},${d})"></td>`;
+          d++;
         }
       }
-      html += `<td style="padding:2px 1px;border-bottom:1px solid var(--border);background:${bg};cursor:pointer;min-width:28px;" onclick="selectCalDate(${y},${mo},${d})">${inner}</td>`;
     }
     html += '</tr>';
   });
