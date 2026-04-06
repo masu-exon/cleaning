@@ -709,9 +709,9 @@ function renderSettingsView() {
   const companyId = state.companyId;
   const savedPropIds = CONFIG.getPropertyIds(companyId).join(', ');
   const baseUrl = location.href.split('?')[0];
-  const apiKey = state.apiKey || '';
-  const propKey = localStorage.getItem('beds24_prop_key') || '';
-  const currentUrl = baseUrl + '?company=' + companyId + (apiKey ? '&key=' + apiKey : '') + (propKey ? '&prop=' + propKey : '');
+  const apiKey = state.apiKey || CONFIG.API_KEY || '';
+  const propKey = state.propKey || localStorage.getItem('beds24_prop_key') || CONFIG.PROP_KEY || '';
+  const currentUrl = baseUrl + '?company=' + encodeURIComponent(companyId) + (apiKey ? '&key=' + encodeURIComponent(apiKey) : '') + (propKey ? '&prop=' + encodeURIComponent(propKey) : '');
   const allProps = getAllProperties();
 
   let html = '<div class="settings-wrap">';
@@ -734,8 +734,10 @@ function renderSettingsView() {
 
   // Property name settings
   html += `<div class="settings-card">
-    <h3>施設設定（${companyId}）</h3>
-    <label class="settings-label">会社・グループ名</label>
+    <h3>清掃会社設定</h3>
+    <label class="settings-label">会社ID（URLの ?company= 部分）</label>
+    <input class="settings-input" type="text" id="inp-companyid" placeholder="company_A" value="${companyId}">
+    <label class="settings-label">会社・グループ名（表示名）</label>
     <input class="settings-input" type="text" id="inp-companyname" placeholder="〇〇清掃サービス" value="${state.companyName}">
     <button class="settings-btn" onclick="saveSettings()">保存</button>
   </div>`;
@@ -882,9 +884,13 @@ async function loadLiveBookings() {
 
 function saveSettings() {
   const name = document.getElementById('inp-companyname').value.trim();
+  const newCompanyId = document.getElementById('inp-companyid') ? document.getElementById('inp-companyid').value.trim() : '';
   if (name) {
     state.companyName = name;
     localStorage.setItem('company_name_' + state.companyId, name);
+  }
+  if (newCompanyId && newCompanyId !== state.companyId) {
+    state.companyId = newCompanyId;
   }
   alert('保存しました');
   render();
