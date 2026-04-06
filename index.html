@@ -309,7 +309,7 @@ const state = {
   loading: false,
   companyId: CONFIG.getCompanyId(),
   isAdmin: CONFIG.isAdmin(),
-  companyName: localStorage.getItem('company_name_' + CONFIG.getCompanyId()) || 'デモ会社',
+  companyName: localStorage.getItem('company_name_' + CONFIG.getCompanyId()) || CONFIG.getCompanyId() || 'デモ会社',
 };
 
 function saveChecks() { localStorage.setItem('checks', JSON.stringify(state.checks)); }
