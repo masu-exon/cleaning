@@ -838,11 +838,13 @@ function renderSettingsView() {
 
   if (companies.length > 0) {
     companies.forEach((c, idx) => {
-      const url = baseUrl + '?company=' + encodeURIComponent(c.id) + '&key=' + encodeURIComponent(apiKey) + '&prop=' + encodeURIComponent(propKey);
+      const companyPropKey = c.propKey || propKey || '';
+      const url = baseUrl + '?company=' + encodeURIComponent(c.id) + '&key=' + encodeURIComponent(apiKey) + (companyPropKey ? '&prop=' + encodeURIComponent(companyPropKey) : '');
       html += `<div class="company-row">
         <div class="company-row-info">
           <div class="company-row-name">${c.name}</div>
           <div class="company-row-url">${url}</div>
+          ${c.propKey ? '<div style="font-size:10px;color:var(--text3);margin-top:2px;">propKey: ' + c.propKey.substring(0,12) + '...</div>' : '<div style="font-size:10px;color:var(--red);margin-top:2px;">⚠ プロパティキー未設定</div>'}
           ${c.props && c.props.length > 0 ? '<div style="margin-top:4px;">' + c.props.map(p => `<span class="prop-tag">${p}</span>`).join('') + '</div>' : ''}
         </div>
         <div class="company-row-btns">
@@ -861,7 +863,9 @@ function renderSettingsView() {
       <input class="settings-input" type="text" id="new-company-id" placeholder="会社ID（例: company_A）" style="margin:0;">
       <input class="settings-input" type="text" id="new-company-name" placeholder="会社名（例: 山田清掃）" style="margin:0;">
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">担当施設名（カンマ区切り・任意）</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">プロパティキー（Beds24の施設キー）</div>
+    <input class="settings-input" type="text" id="new-company-propkey" placeholder="例: H4dSOVKZ76z2gDcwWKsONSely" style="margin-bottom:8px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">担当施設名（表示用・カンマ区切り・任意）</div>
     <input class="settings-input" type="text" id="new-company-props" placeholder="例: Lakeside Retreat 1階, Lakeside Retreat 天神" style="margin-bottom:8px;">
     <button class="settings-btn" onclick="addCompany()">追加</button>
   </div>
@@ -874,11 +878,12 @@ function renderSettingsView() {
 function addCompany() {
   const id = document.getElementById('new-company-id').value.trim();
   const name = document.getElementById('new-company-name').value.trim();
+  const propKey = document.getElementById('new-company-propkey').value.trim();
   const propsStr = document.getElementById('new-company-props').value.trim();
   if (!id || !name) { alert('会社IDと会社名を入力してください'); return; }
   const props = propsStr ? propsStr.split(',').map(s => s.trim()).filter(s => s) : [];
   const companies = getCompanies();
-  companies.push({ id, name, props });
+  companies.push({ id, name, propKey, props });
   saveCompanies(companies);
   render();
 }
