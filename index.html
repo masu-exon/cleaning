@@ -220,6 +220,7 @@ const CONFIG = {
   // URLパラメータからAPIキーを取得（なければlocalStorageから）
   API_KEY: new URLSearchParams(location.search).get('key') || localStorage.getItem('beds24_api_key') || '',
   PROP_KEY: new URLSearchParams(location.search).get('prop') || localStorage.getItem('beds24_prop_key') || '',
+  PROP_KEYS: (new URLSearchParams(location.search).get('prop') || '').split(',').map(s=>s.trim()).filter(s=>s),
   getPropertyIds: (companyId) => {
     const saved = localStorage.getItem('prop_ids_' + companyId);
     return saved ? JSON.parse(saved) : [];
@@ -838,13 +839,14 @@ function renderSettingsView() {
 
   if (companies.length > 0) {
     companies.forEach((c, idx) => {
-      const companyPropKey = c.propKey || propKey || '';
-      const url = baseUrl + '?company=' + encodeURIComponent(c.id) + '&key=' + encodeURIComponent(apiKey) + (companyPropKey ? '&prop=' + encodeURIComponent(companyPropKey) : '');
+      const companyPropKeys = c.propKeys || (c.propKey ? [c.propKey] : []);
+      const propParam = companyPropKeys.length > 0 ? '&prop=' + encodeURIComponent(companyPropKeys.join(',')) : '';
+      const url = baseUrl + '?company=' + encodeURIComponent(c.id) + '&key=' + encodeURIComponent(apiKey) + propParam;
       html += `<div class="company-row">
         <div class="company-row-info">
           <div class="company-row-name">${c.name}</div>
           <div class="company-row-url">${url}</div>
-          ${c.propKey ? '<div style="font-size:10px;color:var(--text3);margin-top:2px;">propKey: ' + c.propKey.substring(0,12) + '...</div>' : '<div style="font-size:10px;color:var(--red);margin-top:2px;">⚠ プロパティキー未設定</div>'}
+          ${(c.propKeys && c.propKeys.length > 0) ? '<div style="font-size:10px;color:var(--text3);margin-top:2px;">propKey: ' + c.propKeys.length + '件設定済み</div>' : (c.propKey ? '<div style="font-size:10px;color:var(--text3);margin-top:2px;">propKey: 1件設定済み</div>' : '<div style="font-size:10px;color:var(--red);margin-top:2px;">⚠ プロパティキー未設定</div>')}
           ${c.props && c.props.length > 0 ? '<div style="margin-top:4px;">' + c.props.map(p => `<span class="prop-tag">${p}</span>`).join('') + '</div>' : ''}
         </div>
         <div class="company-row-btns">
@@ -863,8 +865,8 @@ function renderSettingsView() {
       <input class="settings-input" type="text" id="new-company-id" placeholder="会社ID（例: company_A）" style="margin:0;">
       <input class="settings-input" type="text" id="new-company-name" placeholder="会社名（例: 山田清掃）" style="margin:0;">
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">プロパティキー（Beds24の施設キー）</div>
-    <input class="settings-input" type="text" id="new-company-propkey" placeholder="例: H4dSOVKZ76z2gDcwWKsONSely" style="margin-bottom:8px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">プロパティキー（複数ある場合はカンマ区切り）</div>
+    <input class="settings-input" type="text" id="new-company-propkey" placeholder="例: key1, key2, key3" style="margin-bottom:8px;">
     <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">担当施設名（表示用・カンマ区切り・任意）</div>
     <input class="settings-input" type="text" id="new-company-props" placeholder="例: Lakeside Retreat 1階, Lakeside Retreat 天神" style="margin-bottom:8px;">
     <button class="settings-btn" onclick="addCompany()">追加</button>
@@ -878,12 +880,13 @@ function renderSettingsView() {
 function addCompany() {
   const id = document.getElementById('new-company-id').value.trim();
   const name = document.getElementById('new-company-name').value.trim();
-  const propKey = document.getElementById('new-company-propkey').value.trim();
+  const propKeyStr = document.getElementById('new-company-propkey').value.trim();
   const propsStr = document.getElementById('new-company-props').value.trim();
   if (!id || !name) { alert('会社IDと会社名を入力してください'); return; }
+  const propKeys = propKeyStr ? propKeyStr.split(',').map(s => s.trim()).filter(s => s) : [];
   const props = propsStr ? propsStr.split(',').map(s => s.trim()).filter(s => s) : [];
   const companies = getCompanies();
-  companies.push({ id, name, propKey, props });
+  companies.push({ id, name, propKeys, props });
   saveCompanies(companies);
   render();
 }
@@ -1029,18 +1032,26 @@ async function loadLiveBookings() {
   const from = new Date(today); from.setMonth(from.getMonth() - 3);
   const to = new Date(today); to.setMonth(to.getMonth() + 3);
   const fmt = d => d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-  const bookings = await fetchBookings(state.apiKey, state.propKey, fmt(from), fmt(to));
-  if (Array.isArray(bookings)) {
-    state.bookingsCache = {};
-    const propNames = {};
-    state.properties.forEach(p => { propNames[String(p.id)] = p.name; });
-    bookings.forEach(b => {
-      const converted = convertV1Booking(b, propNames[String(b.propId)]);
-      converted.forEach(c => {
-        if (!state.bookingsCache[c.date]) state.bookingsCache[c.date] = [];
-        state.bookingsCache[c.date].push(c);
+  
+  // 複数propKeyに対応
+  const propKeys = CONFIG.PROP_KEYS.length > 0 ? CONFIG.PROP_KEYS : (state.propKey ? [state.propKey] : ['']);
+  state.bookingsCache = {};
+  const propNames = {};
+  state.properties.forEach(p => { propNames[String(p.id)] = p.name; });
+
+  for (const pk of propKeys) {
+    const bookings = await fetchBookings(state.apiKey, pk, fmt(from), fmt(to));
+    if (Array.isArray(bookings)) {
+      bookings.forEach(b => {
+        const converted = convertV1Booking(b, propNames[String(b.propId)]);
+        converted.forEach(c => {
+          if (!state.bookingsCache[c.date]) state.bookingsCache[c.date] = [];
+          // 重複チェック
+          const exists = state.bookingsCache[c.date].some(x => x.propId === c.propId && x.guest === c.guest && x.type === c.type);
+          if (!exists) state.bookingsCache[c.date].push(c);
+        });
       });
-    });
+    }
   }
 }
 
@@ -1106,6 +1117,24 @@ async function autoConnect() {
           state.roomMap[String(r.roomId)] = { propName: p.name, unitName: r.unitNames || r.name || '' };
         });
       });
+      // 複数propKeyの場合、追加のpropKeyでもプロパティ情報を取得
+      if (CONFIG.PROP_KEYS.length > 1) {
+        for (let i = 1; i < CONFIG.PROP_KEYS.length; i++) {
+          try {
+            const extraData = await fetchProperties(state.apiKey, CONFIG.PROP_KEYS[i]);
+            if (extraData && Array.isArray(extraData)) {
+              extraData.forEach(p => {
+                if (!state.properties.find(x => x.id === String(p.propId))) {
+                  state.properties.push({ id: String(p.propId), name: p.name || ('施設' + p.propId) });
+                }
+                if (p.roomTypes) p.roomTypes.forEach(r => {
+                  state.roomMap[String(r.roomId)] = { propName: p.name, unitName: r.unitNames || r.name || '' };
+                });
+              });
+            }
+          } catch(e) { console.log('追加propKey取得失敗:', e); }
+        }
+      }
       await loadLiveBookings();
       await loadFromSupabase();
     }
