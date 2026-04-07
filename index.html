@@ -167,6 +167,40 @@
   .copy-btn { width: 100%; margin-top: 8px; padding: 9px; font-size: 12px; font-weight: 700; background: none; color: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-sm); cursor: pointer; font-family: inherit; }
   .copy-btn:active { background: var(--accent-light); }
   .demo-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; background: var(--amber-light); color: var(--amber); }
+
+  /* 管理画面 */
+  .admin-wrap { padding: 24px; max-width: 900px; margin: 0 auto; }
+  .admin-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .admin-subtitle { font-size: 13px; color: var(--text3); margin-bottom: 24px; }
+  .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 600px) { .admin-grid { grid-template-columns: 1fr; } }
+  .admin-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .admin-card h3 { font-size: 13px; font-weight: 700; color: var(--text2); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 14px; }
+  .company-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 8px; }
+  .company-row:last-child { border-bottom: none; }
+  .company-row-info { flex: 1; min-width: 0; }
+  .company-row-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .company-row-url { font-size: 11px; color: var(--text3); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .company-row-btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .btn-sm { font-size: 11px; padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; cursor: pointer; color: var(--text2); font-family: inherit; white-space: nowrap; }
+  .btn-sm:hover { background: var(--surface2); }
+  .btn-sm.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn-sm.primary:hover { opacity: 0.85; }
+  .btn-sm.danger { color: var(--red); border-color: var(--red-light); }
+  .stat-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row-label { color: var(--text2); }
+  .stat-row-val { font-weight: 500; color: var(--text); }
+  .add-company-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .inline-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .inline-row input { flex: 1; }
+  .prop-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; background: var(--surface2); border-radius: 4px; padding: 2px 8px; margin: 2px; color: var(--text2); }
+  .all-props-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; margin-top: 8px; }
+  .all-status-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .all-status-table th { text-align: left; padding: 6px 8px; font-size: 11px; color: var(--text3); font-weight: 700; border-bottom: 2px solid var(--border); }
+  .all-status-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .all-status-table tr:last-child td { border-bottom: none; }
+
 </style>
 </head>
 <body>
@@ -700,70 +734,176 @@ function renderCalendarView() {
   document.getElementById('main-area').innerHTML = html;
 }
 
-function renderSettingsView() {
-  document.getElementById('header-area').innerHTML = `
-    <div class="header">
-      <div class="header-top"><div class="company-name">設定・API</div></div>
-    </div>`;
+function getCompanies() {
+  const saved = localStorage.getItem('admin_companies');
+  return saved ? JSON.parse(saved) : [];
+}
+function saveCompanies(companies) {
+  localStorage.setItem('admin_companies', JSON.stringify(companies));
+}
 
-  const companyId = state.companyId;
-  const savedPropIds = CONFIG.getPropertyIds(companyId).join(', ');
+function renderSettingsView() {
   const baseUrl = location.href.split('?')[0];
   const apiKey = state.apiKey || CONFIG.API_KEY || '';
-  const propKey = state.propKey || localStorage.getItem('beds24_prop_key') || CONFIG.PROP_KEY || '';
-  const currentUrl = baseUrl + '?company=' + encodeURIComponent(companyId) + (apiKey ? '&key=' + encodeURIComponent(apiKey) : '') + (propKey ? '&prop=' + encodeURIComponent(propKey) : '');
+  const propKey = state.propKey || CONFIG.PROP_KEY || '';
   const allProps = getAllProperties();
+  const companies = getCompanies();
 
-  let html = '<div class="settings-wrap">';
+  document.getElementById('header-area').innerHTML = `
+    <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;position:sticky;top:0;z-index:100;">
+      <div style="max-width:900px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.08em;">ADMIN</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text);">管理画面</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${state.isLive ? '<span style="font-size:11px;color:var(--green);font-weight:700;">● LIVE</span>' : '<span class="demo-badge">● デモ</span>'}
+        </div>
+      </div>
+    </div>`;
 
-  // API Key
-  const savedPropKey = localStorage.getItem('beds24_prop_key') || '';
-  html += `<div class="settings-card">
+  // 今日の清掃状況サマリー
+  const todayBks = getBookingsForDate(TODAY).filter(b => b.type !== 'checkin');
+  const todayDone = todayBks.filter(b => state.checks[checkKey(b.propId, TODAY)]);
+  const todayPending = todayBks.filter(b => !state.checks[checkKey(b.propId, TODAY)]);
+
+  let html = '<div class="admin-wrap">';
+
+  // 今日のサマリー
+  html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
+    <div class="admin-card" style="text-align:center;">
+      <div style="font-size:32px;font-weight:700;color:var(--amber);">${todayPending.length}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px;">本日 清掃待ち</div>
+    </div>
+    <div class="admin-card" style="text-align:center;">
+      <div style="font-size:32px;font-weight:700;color:var(--green);">${todayDone.length}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px;">本日 清掃完了</div>
+    </div>
+    <div class="admin-card" style="text-align:center;">
+      <div style="font-size:32px;font-weight:700;color:var(--accent);">${allProps.length}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px;">接続施設数</div>
+    </div>
+  </div>`;
+
+  // 本日の清掃一覧
+  if (todayBks.length > 0) {
+    html += `<div class="admin-card" style="margin-bottom:24px;">
+      <h3>本日の清掃状況（${fmtJP(TODAY)}）</h3>
+      <table class="all-status-table">
+        <thead><tr><th>施設</th><th>ゲスト</th><th>種別</th><th>ステータス</th></tr></thead>
+        <tbody>`;
+    todayBks.forEach(b => {
+      const done = state.checks[checkKey(b.propId, TODAY)];
+      html += `<tr>
+        <td style="font-weight:500;">${b.propName}</td>
+        <td style="color:var(--text2);">${b.guest}</td>
+        <td><span class="badge ${b.type}" style="font-size:10px;">${b.label}</span></td>
+        <td>${done ? '<span style="color:var(--green);font-weight:500;">✓ 完了</span>' : '<span style="color:var(--amber);">待ち</span>'}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+
+  html += '<div class="admin-grid">';
+
+  // Beds24 API接続
+  const savedPropKey = propKey;
+  html += `<div class="admin-card">
     <h3>Beds24 API接続</h3>
-    <label class="settings-label">APIキー（設定 → アカウント → アカウントアクセス）</label>
-    <input class="settings-input" type="password" id="inp-apikey" placeholder="cleaning20250403" value="${state.apiKey}">
-    <label class="settings-label">プロパティキー（設定 → プロパティ → 施設を選択 → 設定）</label>
+    <label class="settings-label">APIキー</label>
+    <input class="settings-input" type="password" id="inp-apikey" placeholder="cleaning20250403" value="${apiKey}">
+    <label class="settings-label">プロパティキー</label>
     <input class="settings-input" type="password" id="inp-propkey" placeholder="H4dSOVKZ76z2gDcwWKsONSely" value="${savedPropKey}">
     <button class="settings-btn" onclick="connectApi()">接続テスト＆保存</button>
     <div id="api-status-msg"></div>
-    <div class="settings-hint">
-      <b>APIキー：</b> 設定 → アカウント → アカウントアクセス → APIキー欄<br>
+    <div class="settings-hint" style="margin-top:10px;">
+      <b>APIキー：</b> 設定 → アカウント → アカウントアクセス<br>
       <b>プロパティキー：</b> 設定 → プロパティ → 施設選択 → 設定タブ
     </div>
   </div>`;
 
-  // Property name settings
-  html += `<div class="settings-card">
-    <h3>清掃会社設定</h3>
-    <label class="settings-label">会社ID（URLの ?company= 部分）</label>
-    <input class="settings-input" type="text" id="inp-companyid" placeholder="company_A" value="${companyId}">
-    <label class="settings-label">会社・グループ名（表示名）</label>
-    <input class="settings-input" type="text" id="inp-companyname" placeholder="〇〇清掃サービス" value="${state.companyName}">
-    <button class="settings-btn" onclick="saveSettings()">保存</button>
-  </div>`;
+  // 接続済み施設一覧
+  html += `<div class="admin-card">
+    <h3>接続済み施設（${allProps.length}件）</h3>
+    <div style="max-height:300px;overflow-y:auto;">`;
+  allProps.forEach(p => {
+    html += `<div class="stat-row"><span class="stat-row-label">${p.name}</span><span class="stat-row-val" style="font-size:11px;font-family:monospace;color:var(--text3);">ID: ${p.id}</span></div>`;
+  });
+  html += '</div></div>';
 
-  // URL Share
-  html += `<div class="settings-card">
-    <h3>清掃会社への共有URL</h3>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">このURLを清掃会社さんに送るだけで使えます</p>
-    <div class="url-box">${currentUrl}</div>
-    <button class="copy-btn" onclick="copyUrl('${currentUrl}')">URLをコピー</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:10px;">
-      他の会社には <code>?company=B</code> などURLの末尾を変えて共有してください
-    </div>
-  </div>`;
+  html += '</div>'; // end admin-grid
 
-  // Props list
-  if (allProps.length > 0) {
-    html += `<div class="settings-card"><h3>接続済み施設</h3>`;
-    allProps.forEach(p => {
-      html += `<div class="prop-list-item"><span class="prop-list-name">${p.name}</span><span class="prop-list-id">ID: ${p.id}</span></div>`;
+  // 清掃会社管理
+  html += `<div class="admin-card" style="margin-bottom:24px;">
+    <h3>清掃会社管理</h3>`;
+
+  if (companies.length > 0) {
+    companies.forEach((c, idx) => {
+      const url = baseUrl + '?company=' + encodeURIComponent(c.id) + '&key=' + encodeURIComponent(apiKey) + '&prop=' + encodeURIComponent(propKey);
+      html += `<div class="company-row">
+        <div class="company-row-info">
+          <div class="company-row-name">${c.name}</div>
+          <div class="company-row-url">${url}</div>
+          ${c.props && c.props.length > 0 ? '<div style="margin-top:4px;">' + c.props.map(p => `<span class="prop-tag">${p}</span>`).join('') + '</div>' : ''}
+        </div>
+        <div class="company-row-btns">
+          <button class="btn-sm primary" onclick="copyUrl('${url}')">URLコピー</button>
+          <button class="btn-sm danger" onclick="deleteCompany(${idx})">削除</button>
+        </div>
+      </div>`;
     });
-    html += '</div>';
+  } else {
+    html += '<div style="font-size:13px;color:var(--text3);padding:12px 0;">まだ清掃会社が登録されていません</div>';
   }
+
+  html += `<div class="add-company-form">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">新しい清掃会社を追加</div>
+    <div class="inline-row">
+      <input class="settings-input" type="text" id="new-company-id" placeholder="会社ID（例: company_A）" style="margin:0;">
+      <input class="settings-input" type="text" id="new-company-name" placeholder="会社名（例: 山田清掃）" style="margin:0;">
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">担当施設名（カンマ区切り・任意）</div>
+    <input class="settings-input" type="text" id="new-company-props" placeholder="例: Lakeside Retreat 1階, Lakeside Retreat 天神" style="margin-bottom:8px;">
+    <button class="settings-btn" onclick="addCompany()">追加</button>
+  </div>
+  </div>`;
 
   html += '</div>';
   document.getElementById('main-area').innerHTML = html;
+}
+
+function addCompany() {
+  const id = document.getElementById('new-company-id').value.trim();
+  const name = document.getElementById('new-company-name').value.trim();
+  const propsStr = document.getElementById('new-company-props').value.trim();
+  if (!id || !name) { alert('会社IDと会社名を入力してください'); return; }
+  const props = propsStr ? propsStr.split(',').map(s => s.trim()).filter(s => s) : [];
+  const companies = getCompanies();
+  companies.push({ id, name, props });
+  saveCompanies(companies);
+  render();
+}
+
+function deleteCompany(idx) {
+  if (!confirm('この清掃会社を削除しますか？')) return;
+  const companies = getCompanies();
+  companies.splice(idx, 1);
+  saveCompanies(companies);
+  render();
+}
+
+function saveSettings() {
+  const name = document.getElementById('inp-companyname') ? document.getElementById('inp-companyname').value.trim() : '';
+  const newCompanyId = document.getElementById('inp-companyid') ? document.getElementById('inp-companyid').value.trim() : '';
+  if (name) {
+    state.companyName = name;
+    localStorage.setItem('company_name_' + state.companyId, name);
+  }
+  if (newCompanyId && newCompanyId !== state.companyId) {
+    state.companyId = newCompanyId;
+  }
+  alert('保存しました');
+  render();
 }
 
 // ============================================================
