@@ -772,15 +772,15 @@ function renderSettingsView() {
   // 今日のサマリー
   html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
     <div class="admin-card" style="text-align:center;">
-      <div style="font-size:32px;font-weight:700;color:var(--amber);">${todayPending.length}</div>
+      <div style="font-size:32px;font-weight:700;color:var(--amber);" class="admin-pending">${todayPending.length}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:4px;">本日 清掃待ち</div>
     </div>
     <div class="admin-card" style="text-align:center;">
-      <div style="font-size:32px;font-weight:700;color:var(--green);">${todayDone.length}</div>
+      <div style="font-size:32px;font-weight:700;color:var(--green);" class="admin-done">${todayDone.length}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:4px;">本日 清掃完了</div>
     </div>
     <div class="admin-card" style="text-align:center;">
-      <div style="font-size:32px;font-weight:700;color:var(--accent);">${allProps.length}</div>
+      <div style="font-size:32px;font-weight:700;color:var(--accent);" class="admin-total">${allProps.length}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:4px;">接続施設数</div>
     </div>
   </div>`;
@@ -825,7 +825,7 @@ function renderSettingsView() {
   // 接続済み施設一覧
   html += `<div class="admin-card">
     <h3>接続済み施設（${allProps.length}件）</h3>
-    <div style="max-height:300px;overflow-y:auto;">`;
+    <div style="max-height:300px;overflow-y:auto;" id="admin-prop-list">`;
   allProps.forEach(p => {
     html += `<div class="stat-row"><span class="stat-row-label">${p.name}</span><span class="stat-row-val" style="font-size:11px;font-family:monospace;color:var(--text3);">ID: ${p.id}</span></div>`;
   });
@@ -992,8 +992,26 @@ async function connectApi() {
         });
       });
       await loadLiveBookings();
-      msg.innerHTML = '<div class="settings-status ok">✓ 接続成功！予約データを取得しました</div>';
-      render();
+      await loadFromSupabase();
+      const propCount = getAllProperties().length;
+      msg.innerHTML = '<div class="settings-status ok">✓ 接続成功！' + propCount + '件の施設を取得しました</div>';
+      // 管理画面の場合はrenderせずに施設リストだけ更新
+      const propListEl = document.getElementById('admin-prop-list');
+      if (propListEl) {
+        propListEl.innerHTML = getAllProperties().map(p =>
+          '<div class="stat-row"><span class="stat-row-label">' + p.name + '</span><span class="stat-row-val" style="font-size:11px;font-family:monospace;color:var(--text3);">ID: ' + p.id + '</span></div>'
+        ).join('');
+        // サマリーも更新
+        const todayBks2 = getBookingsForDate(TODAY).filter(b => b.type !== 'checkin');
+        const el1 = document.querySelector('.admin-pending');
+        const el2 = document.querySelector('.admin-done');
+        const el3 = document.querySelector('.admin-total');
+        if (el1) el1.textContent = todayBks2.filter(b => !state.checks[checkKey(b.propId, TODAY)]).length;
+        if (el2) el2.textContent = todayBks2.filter(b => state.checks[checkKey(b.propId, TODAY)]).length;
+        if (el3) el3.textContent = propCount;
+      } else {
+        render();
+      }
     } else {
       msg.innerHTML = '<div class="settings-status err">エラー: ' + (data.error || '接続失敗') + '</div>';
     }
