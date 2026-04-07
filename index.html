@@ -388,18 +388,17 @@ async function apiv1(endpoint, body) {
 }
 
 async function fetchProperties(apiKey, propKey) {
-  const res = await apiv1('/json/getProperties', {
-    authentication: { apiKey, propKey }
-  });
-  // v1は {"getProperties": [...]} の形で返ってくる
+  const auth = propKey ? { apiKey, propKey } : { apiKey };
+  const res = await apiv1('/json/getProperties', { authentication: auth });
   if (res && res.getProperties) return res.getProperties;
   if (Array.isArray(res)) return res;
   return res;
 }
 
 async function fetchBookings(apiKey, propKey, fromDate, toDate) {
+  const auth = propKey ? { apiKey, propKey } : { apiKey };
   return await apiv1('/json/getBookings', {
-    authentication: { apiKey, propKey },
+    authentication: auth,
     departureFrom: fromDate,
     departureTo: toDate,
     arrivalFrom: fromDate,
@@ -812,8 +811,8 @@ function renderSettingsView() {
     <h3>Beds24 API接続</h3>
     <label class="settings-label">APIキー</label>
     <input class="settings-input" type="password" id="inp-apikey" placeholder="cleaning20250403" value="${apiKey}">
-    <label class="settings-label">プロパティキー</label>
-    <input class="settings-input" type="password" id="inp-propkey" placeholder="H4dSOVKZ76z2gDcwWKsONSely" value="${savedPropKey}">
+    <label class="settings-label">プロパティキー（任意・特定施設のみ接続する場合）</label>
+    <input class="settings-input" type="password" id="inp-propkey" placeholder="空欄=全施設取得" value="${savedPropKey}">
     <button class="settings-btn" onclick="connectApi()">接続テスト＆保存</button>
     <div id="api-status-msg"></div>
     <div class="settings-hint" style="margin-top:10px;">
@@ -970,10 +969,10 @@ function changeWeek(n) {
 
 async function connectApi() {
   const key = document.getElementById('inp-apikey').value.trim();
-  const propKey = document.getElementById('inp-propkey').value.trim();
+  const propKeyEl = document.getElementById('inp-propkey');
+  const propKey = propKeyEl ? propKeyEl.value.trim() : '';
   const msg = document.getElementById('api-status-msg');
   if (!key) { msg.innerHTML = '<div class="settings-status err">APIキーを入力してください</div>'; return; }
-  if (!propKey) { msg.innerHTML = '<div class="settings-status err">プロパティキーを入力してください</div>'; return; }
   msg.innerHTML = '<div class="settings-status">接続中...</div>';
   try {
     const data = await fetchProperties(key, propKey);
@@ -1088,7 +1087,7 @@ function render() {
 async function autoConnect() {
   const key = CONFIG.API_KEY;
   const propKey = CONFIG.PROP_KEY;
-  if (!key || !propKey) { render(); return; }
+  if (!key) { render(); return; }
   try {
     const data = await fetchProperties(key, propKey);
     if (data && !data.error && data.length > 0) {
