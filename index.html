@@ -670,8 +670,16 @@ function renderCalendarView() {
         const ciDate = ciEntry ? ciEntry.date : coEntry.date;
         const coDate = coEntry.date;
         const isDone = !!state.checks[checkKey(coEntry.propId, new Date(coDate+'T00:00:00'))];
-        const numAdult = coEntry.numAdult || ciEntry && ciEntry.numAdult || 1;
-        stays.push({ guest: b.guest, ciDate, coDate, isDone, numAdult });
+        const srcEntry = coEntry || ciEntry;
+        stays.push({
+          guest: b.guest, ciDate, coDate, isDone,
+          numAdult: srcEntry.numAdult || 1,
+          numChild: srcEntry.numChild || 0,
+          propName: srcEntry.propName || '',
+          referer: srcEntry.referer || '',
+          bookId: srcEntry.bookId || '',
+          apiReference: srcEntry.apiReference || '',
+        });
       }
     });
 
