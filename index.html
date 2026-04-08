@@ -201,6 +201,17 @@
   .all-status-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   .all-status-table tr:last-child td { border-bottom: none; }
 
+
+  /* ポップアップ */
+  .popup-overlay { position: fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .popup-card { background:var(--surface); border-radius:var(--radius); border:1px solid var(--border); padding:20px; width:100%; max-width:360px; }
+  .popup-title { font-size:16px; font-weight:700; margin-bottom:14px; color:var(--text); }
+  .popup-row { display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .popup-row:last-child { border-bottom:none; }
+  .popup-label { color:var(--text2); }
+  .popup-val { font-weight:500; color:var(--text); text-align:right; }
+  .popup-close { width:100%; margin-top:14px; padding:10px; background:var(--accent); color:white; border:none; border-radius:var(--radius-sm); font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; }
+
 </style>
 </head>
 <body>
@@ -430,26 +441,27 @@ function convertV1Booking(b, propName) {
   } else {
     displayName = propName || ('施設' + b.propId);
   }
+  const bookingInfo = {
+    propId: b.propId, propName: displayName, roomId: b.roomId, unitId: b.unitId,
+    guest: guestName, numAdult: adults, numChild: parseInt(b.numChild)||0,
+    ciDate: arrDate, coDate: depDate,
+    bookId: b.bookId || '', referer: b.referer || b.refererEditable || '',
+    apiReference: b.apiReference || '',
+  };
   const results = [];
   if (arrDate === depDate) {
-    results.push({
-      propId: b.propId, propName: displayName, roomId: b.roomId, unitId: b.unitId,
+    results.push({ ...bookingInfo,
       date: depDate, type: 'both', label: 'アウト＆イン',
-      guest: guestName, checkout: '10:00', checkin: '15:00',
-      towels: adults, linen: Math.ceil(adults / 2),
+      checkout: '10:00', checkin: '15:00',
     });
   } else {
-    results.push({
-      propId: b.propId, propName: displayName, roomId: b.roomId, unitId: b.unitId,
+    results.push({ ...bookingInfo,
       date: depDate, type: 'checkout', label: 'チェックアウト',
-      guest: guestName, checkout: '10:00', checkin: null,
-      towels: adults, linen: Math.ceil(adults / 2),
+      checkout: '10:00', checkin: null,
     });
-    results.push({
-      propId: b.propId, propName: displayName, roomId: b.roomId, unitId: b.unitId,
+    results.push({ ...bookingInfo,
       date: arrDate, type: 'checkin', label: 'チェックイン',
-      guest: guestName, checkout: null, checkin: '15:00',
-      towels: adults, linen: Math.ceil(adults / 2),
+      checkout: null, checkin: '15:00',
     });
   }
   return results;
@@ -619,7 +631,7 @@ function renderCalendarView() {
     const w = ['日','月','火','水','木','金','土'][dt.getDay()];
     const wColor = dt.getDay()===0?'#C0392B':dt.getDay()===6?'#2C5F8A':'var(--text3)';
     const dayLabel = (dt.getMonth()+1)+'/'+dt.getDate();
-    html += `<td style="text-align:center;padding:4px 2px;font-size:11px;color:${isT?'white':wColor};border-bottom:1px solid var(--border);min-width:40px;${isT?'background:var(--accent);border-radius:4px 4px 0 0;':''}">${dayLabel}<br>${w}</td>`;
+    html += `<td style="text-align:center;padding:4px 2px;font-size:11px;color:${isT?'white':wColor};border-bottom:1px solid var(--border);min-width:44px;border-left:1px solid var(--border);${isT?'background:var(--accent);border-radius:4px 4px 0 0;':''}">${dayLabel}<br>${w}</td>`;
   });
   html += '</tr></thead><tbody>';
 
@@ -658,7 +670,8 @@ function renderCalendarView() {
         const ciDate = ciEntry ? ciEntry.date : coEntry.date;
         const coDate = coEntry.date;
         const isDone = !!state.checks[checkKey(coEntry.propId, new Date(coDate+'T00:00:00'))];
-        stays.push({ guest: b.guest, ciDate, coDate, isDone });
+        const numAdult = coEntry.numAdult || ciEntry && ciEntry.numAdult || 1;
+        stays.push({ guest: b.guest, ciDate, coDate, isDone, numAdult });
       }
     });
 
@@ -687,9 +700,20 @@ function renderCalendarView() {
         span = Math.min(span, days.length - di);
         const color = stay.isDone ? '#1D9E75' : '#2C5F8A';
         const gName = stay.guest.replace('様','');
-        html += `<td colspan="${span}" style="padding:2px 3px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y2},${mo2},${d2})">
-          <div style="height:28px;background:${color};border-radius:4px;display:flex;align-items:center;padding:0 8px;overflow:hidden;">
+        // チェックイン日は左に縦線、チェックアウト日は右に縦線
+        const ciD2 = new Date(stay.ciDate+'T00:00:00');
+        const coD2 = new Date(stay.coDate+'T00:00:00');
+        const showCiLine = ciD2 >= ws;
+        const showCoLine = coD2 <= days[days.length-1];
+        const borderStyle = (showCiLine ? 'border-left:3px solid rgba(255,255,255,0.8);' : 'border-radius:0 4px 4px 0;') + (showCoLine ? 'border-right:3px solid rgba(255,255,255,0.8);' : 'border-radius:4px 0 0 4px;');
+        const brStyle = showCiLine && showCoLine ? 'border-radius:4px;' : showCiLine ? 'border-radius:4px 0 0 4px;' : showCoLine ? 'border-radius:0 4px 4px 0;' : 'border-radius:0;';
+        const numStr = stay.numAdult > 1 ? ' (' + stay.numAdult + '名)' : '';
+        const bJson = encodeURIComponent(JSON.stringify({propName:stay.propName||row.propName,guest:stay.guest,numAdult:stay.numAdult||1,numChild:stay.numChild||0,ciDate:stay.ciDate,coDate:stay.coDate,bookId:stay.bookId||'',referer:stay.referer||'',apiReference:stay.apiReference||''}));
+        const nightsN = Math.round((new Date(stay.coDate+'T00:00:00')-new Date(stay.ciDate+'T00:00:00'))/86400000);
+        html += `<td colspan="${span}" style="padding:2px 3px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="showBookingPopup('${bJson}')">
+          <div style="height:28px;background:${color};${brStyle}display:flex;align-items:center;padding:0 8px;overflow:hidden;gap:4px;${showCiLine?'border-left:3px solid rgba(255,255,255,0.7);':''}${showCoLine?'border-right:3px solid rgba(255,255,255,0.7);':''}">
             <span style="font-size:11px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;">${gName}</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.8);white-space:nowrap;flex-shrink:0;">${stay.numAdult||1}名・${nightsN}泊</span>
           </div></td>`;
         di += span;
       } else {
@@ -711,13 +735,18 @@ function renderCalendarView() {
           const color = activeStay.isDone ? '#1D9E75' : '#9A5E10';
           const gName = activeStay.guest.replace('様','');
           const isStart = midStay && new Date(activeStay.ciDate+'T00:00:00') < ws;
-          html += `<td colspan="${span}" style="padding:2px 3px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectCalDate(${y2},${mo2},${d2})">
-            <div style="height:28px;background:${color};border-radius:${isStart?'0':'4px'} 4px 4px ${isStart?'0':'4px'};display:flex;align-items:center;padding:0 8px;overflow:hidden;">
+          const showCoLine2 = new Date(activeStay.coDate+'T00:00:00') <= days[days.length-1];
+          const numStr2 = activeStay.numAdult > 1 ? ' (' + activeStay.numAdult + '名)' : '';
+          const bJson2 = encodeURIComponent(JSON.stringify({propName:activeStay.propName||row.propName,guest:activeStay.guest,numAdult:activeStay.numAdult||1,numChild:activeStay.numChild||0,ciDate:activeStay.ciDate,coDate:activeStay.coDate,bookId:activeStay.bookId||'',referer:activeStay.referer||'',apiReference:activeStay.apiReference||''}));
+          const nightsN2 = Math.round((new Date(activeStay.coDate+'T00:00:00')-new Date(activeStay.ciDate+'T00:00:00'))/86400000);
+          html += `<td colspan="${span}" style="padding:2px 3px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="showBookingPopup('${bJson2}')">
+            <div style="height:28px;background:${color};border-radius:${isStart?'0':'4px'} ${showCoLine2?'4px':'0'} ${showCoLine2?'4px':'0'} ${isStart?'0':'4px'};display:flex;align-items:center;padding:0 8px;overflow:hidden;gap:4px;${showCoLine2?'border-right:3px solid rgba(255,255,255,0.7);':''}">
               <span style="font-size:11px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;">${isStart?'…':''}${gName}</span>
+              <span style="font-size:10px;color:rgba(255,255,255,0.8);white-space:nowrap;flex-shrink:0;">${activeStay.numAdult||1}名・${nightsN2}泊</span>
             </div></td>`;
           di += span;
         } else {
-          html += `<td style="padding:2px 3px;border-bottom:1px solid var(--border);background:${bg};cursor:pointer;" onclick="selectCalDate(${y2},${mo2},${d2})"></td>`;
+          html += `<td style="padding:2px 3px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);background:${bg};cursor:pointer;" onclick="selectCalDate(${y2},${mo2},${d2})"></td>`;
           di++;
         }
       }
@@ -871,6 +900,21 @@ function renderSettingsView() {
     <input class="settings-input" type="text" id="new-company-props" placeholder="例: Lakeside Retreat 1階, Lakeside Retreat 天神" style="margin-bottom:8px;">
     <button class="settings-btn" onclick="addCompany()">追加</button>
   </div>
+  </div>`;
+
+  // CSVダウンロード
+  const todayStr = fmtDate(TODAY);
+  const monthAgo = fmtDate(new Date(TODAY.getFullYear(), TODAY.getMonth()-1, TODAY.getDate()));
+  html += `<div class="admin-card" style="margin-bottom:24px;">
+    <h3>予約一覧CSVダウンロード</h3>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <label style="font-size:12px;color:var(--text2);">期間：</label>
+      <input type="date" id="csv-from" value="${monthAgo}" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);color:var(--text);">
+      <span style="font-size:13px;color:var(--text2);">〜</span>
+      <input type="date" id="csv-to" value="${todayStr}" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);color:var(--text);">
+      <button class="btn-sm primary" onclick="downloadCSV()" style="padding:6px 16px;">CSVダウンロード</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);">チェックアウト日・チェックイン日・施設名・ゲスト・人数・予約サイト・予約番号・清掃状況を出力します</div>
   </div>`;
 
   html += '</div>';
@@ -1071,6 +1115,62 @@ function saveSettings() {
 
 function copyUrl(url) {
   navigator.clipboard.writeText(url).then(() => alert('コピーしました！'));
+}
+
+
+// ============================================================
+// ポップアップ & CSV
+// ============================================================
+function showBookingPopup(bookingJson) {
+  const b = JSON.parse(decodeURIComponent(bookingJson));
+  const nights = Math.round((new Date(b.coDate+'T00:00:00') - new Date(b.ciDate+'T00:00:00')) / 86400000);
+  const el = document.createElement('div');
+  el.className = 'popup-overlay';
+  el.id = 'booking-popup';
+  el.onclick = (e) => { if(e.target === el) closePopup(); };
+  el.innerHTML = `<div class="popup-card">
+    <div class="popup-title">${b.propName}</div>
+    <div class="popup-row"><span class="popup-label">チェックイン</span><span class="popup-val">${b.ciDate}</span></div>
+    <div class="popup-row"><span class="popup-label">チェックアウト</span><span class="popup-val">${b.coDate}</span></div>
+    <div class="popup-row"><span class="popup-label">宿泊数</span><span class="popup-val">${nights}泊</span></div>
+    <div class="popup-row"><span class="popup-label">ゲスト</span><span class="popup-val">${b.guest}</span></div>
+    <div class="popup-row"><span class="popup-label">人数</span><span class="popup-val">大人${b.numAdult}名${b.numChild>0?' 子供'+b.numChild+'名':''}</span></div>
+    <div class="popup-row"><span class="popup-label">予約サイト</span><span class="popup-val">${b.referer || '-'}</span></div>
+    <div class="popup-row"><span class="popup-label">予約番号</span><span class="popup-val" style="font-family:monospace;font-size:11px;">${b.bookId || '-'}</span></div>
+    ${b.apiReference ? '<div class="popup-row"><span class="popup-label">外部番号</span><span class="popup-val" style="font-family:monospace;font-size:11px;">'+b.apiReference+'</span></div>' : ''}
+    <button class="popup-close" onclick="closePopup()">閉じる</button>
+  </div>`;
+  document.body.appendChild(el);
+}
+
+function closePopup() {
+  const el = document.getElementById('booking-popup');
+  if (el) el.remove();
+}
+
+function downloadCSV() {
+  const fromEl = document.getElementById('csv-from');
+  const toEl = document.getElementById('csv-to');
+  if (!fromEl || !toEl) return;
+  const fromDate = fromEl.value;
+  const toDate = toEl.value;
+  
+  const allBks = Object.values(state.bookingsCache).flat()
+    .filter(b => b.type !== 'checkin' && b.date >= fromDate && b.date <= toDate);
+  
+  const rows = [['チェックアウト日','チェックイン日','施設名','ゲスト','大人','子供','予約サイト','予約番号','外部番号','清掃状況']];
+  allBks.forEach(b => {
+    const done = state.checks[checkKey(b.propId, new Date(b.date+'T00:00:00'))] ? '完了' : '未完了';
+    rows.push([b.coDate||b.date, b.ciDate||b.date, b.propName, b.guest, b.numAdult||'', b.numChild||0, b.referer||'', b.bookId||'', b.apiReference||'', done]);
+  });
+  
+  const bom = '\uFEFF';
+  const csv = bom + rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = '清掃データ_'+fromDate+'_'+toDate+'.csv';
+  a.click(); URL.revokeObjectURL(url);
 }
 
 // ============================================================
