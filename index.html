@@ -319,11 +319,11 @@ async function loadFromSupabase() {
   try {
     const [checks, memos] = await Promise.all([
       sbGet(cid, 'checks'),
-      sbGet(cid, 'memos')
+      sbGet('shared', 'memos')
     ]);
-    // マージ（ローカルより優先）
+    // チェックはcompanyIdごと、メモはshared（施設共通）
     Object.entries(checks).forEach(([k, v]) => { state.checks[k.replace(cid+'_checks_','')] = v; });
-    Object.entries(memos).forEach(([k, v]) => { state.memos[k.replace(cid+'_memos_','')] = v; });
+    Object.entries(memos).forEach(([k, v]) => { state.memos[k.replace('shared_memos_','')] = v; });
     saveChecks(); saveMemos();
   } catch(e) {
     console.log('Supabase load error:', e);
@@ -828,7 +828,7 @@ function renderSettingsView() {
     html += `<div class="admin-card" style="margin-bottom:24px;">
       <h3>本日の清掃状況（${fmtJP(TODAY)}）</h3>
       <table class="all-status-table">
-        <thead><tr><th>施設</th><th>ゲスト</th><th>種別</th><th>ステータス</th></tr></thead>
+        <thead><tr><th>施設</th><th>ゲスト</th><th>種別</th><th>ステータス</th><th>メモ</th></tr></thead>
         <tbody>`;
     todayBks.forEach(b => {
       const done = state.checks[checkKey(b.propId, TODAY)];
@@ -836,7 +836,11 @@ function renderSettingsView() {
         <td style="font-weight:500;">${b.propName}</td>
         <td style="color:var(--text2);">${b.guest}</td>
         <td><span class="badge ${b.type}" style="font-size:10px;">${b.label}</span></td>
-        <td>${done ? '<span style="color:var(--green);font-weight:500;">✓ 完了</span>' : '<span style="color:var(--amber);">待ち</span>'}</td>
+        <td id="chk-${b.propId}-${b.date.replace(/-/g,'')}">${done
+          ? '<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="adminToggleCheck(this,''+b.propId+'',''+b.date+'')">✓ 完了</span>'
+          : '<span style="color:var(--amber);cursor:pointer;" onclick="adminToggleCheck(this,''+b.propId+'',''+b.date+'')">待ち →完了</span>'
+        }</td>
+        <td><input type="text" value="${(state.memos[b.propId+'_'+b.date]||'')}" placeholder="メモ" style="width:120px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);" onchange="adminUpdateMemo('${b.propId}','${b.date}',this.value)"></td>
       </tr>`;
     });
     html += '</tbody></table></div>';
@@ -930,6 +934,27 @@ function renderSettingsView() {
   document.getElementById('main-area').innerHTML = html;
 }
 
+
+function adminToggleCheck(el, propId, dateStr) {
+  const date = new Date(dateStr + 'T00:00:00');
+  const ck = checkKey(propId, date);
+  state.checks[ck] = !state.checks[ck];
+  saveChecks();
+  sbSet(state.companyId, 'checks', ck, state.checks[ck]);
+  const done = state.checks[ck];
+  if (el) el.outerHTML = done
+    ? '<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="adminToggleCheck(this,''+propId+'',''+dateStr+'')">✓ 完了</span>'
+    : '<span style="color:var(--amber);cursor:pointer;" onclick="adminToggleCheck(this,''+propId+'',''+dateStr+'')">待ち →完了</span>';
+}
+
+function adminUpdateMemo(propId, dateStr, val) {
+  const date = new Date(dateStr + 'T00:00:00');
+  const mk = memoKey(propId, date);
+  state.memos[mk] = val;
+  saveMemos();
+  sbSet('shared', 'memos', mk, val);
+}
+
 function addCompany() {
   const id = document.getElementById('new-company-id').value.trim();
   const name = document.getElementById('new-company-name').value.trim();
@@ -1006,7 +1031,7 @@ function updateMemo(propId, dateStr, val) {
   const mk = memoKey(propId, date);
   state.memos[mk] = val;
   saveMemos();
-  sbSet(state.companyId, 'memos', mk, val);
+  sbSet('shared', 'memos', mk, val);
 }
 
 function changeDay(n) { state.date = addDays(state.date, n); render(); }
@@ -1214,7 +1239,7 @@ function render() {
 // ページ読み込み時にAPIキーが保存されていれば自動接続
 async function autoConnect() {
   const key = CONFIG.API_KEY;
-  const propKey = CONFIG.PROP_KEY;
+  const propKey = CONFIG.PROP_KEYS.length > 0 ? CONFIG.PROP_KEYS[0] : CONFIG.PROP_KEY;
   if (!key) { render(); return; }
   try {
     const data = await fetchProperties(key, propKey);
