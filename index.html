@@ -447,6 +447,7 @@ function convertV1Booking(b, propName) {
     ciDate: arrDate, coDate: depDate,
     bookId: b.bookId || '', referer: b.referer || b.refererEditable || '',
     apiReference: b.apiReference || '',
+    status: String(b.status || '2'),
   };
   const results = [];
   if (arrDate === depDate) {
@@ -1095,6 +1096,8 @@ async function loadLiveBookings() {
     const bookings = await fetchBookings(state.apiKey, pk, fmt(from), fmt(to));
     if (Array.isArray(bookings)) {
       bookings.forEach(b => {
+        // キャンセル済み（status=0）は除外
+        if (String(b.status) === '0') return;
         const converted = convertV1Booking(b, propNames[String(b.propId)]);
         converted.forEach(c => {
           if (!state.bookingsCache[c.date]) state.bookingsCache[c.date] = [];
@@ -1143,6 +1146,7 @@ function showBookingPopup(bookingJson) {
     <div class="popup-row"><span class="popup-label">宿泊数</span><span class="popup-val">${nights}泊</span></div>
     <div class="popup-row"><span class="popup-label">ゲスト</span><span class="popup-val">${b.guest}</span></div>
     <div class="popup-row"><span class="popup-label">人数</span><span class="popup-val">大人${b.numAdult}名${b.numChild>0?' 子供'+b.numChild+'名':''}</span></div>
+    ${b.status === '1' ? '<div style="background:#FDF0DF;color:#9A5E10;font-size:12px;padding:8px 10px;border-radius:6px;margin-bottom:8px;">⚠ 仮予約（未確定）</div>' : ''}
     <div class="popup-row"><span class="popup-label">予約サイト</span><span class="popup-val">${b.referer || '-'}</span></div>
     <div class="popup-row"><span class="popup-label">予約番号</span><span class="popup-val" style="font-family:monospace;font-size:11px;">${b.bookId || '-'}</span></div>
     ${b.apiReference ? '<div class="popup-row"><span class="popup-label">外部番号</span><span class="popup-val" style="font-family:monospace;font-size:11px;">'+b.apiReference+'</span></div>' : ''}
