@@ -1111,8 +1111,9 @@ async function loadLiveBookings() {
   const to = new Date(today); to.setMonth(to.getMonth() + 3);
   const fmt = d => d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
   
-  // 複数propKeyに対応
-  const propKeys = CONFIG.PROP_KEYS.length > 0 ? CONFIG.PROP_KEYS : (state.propKey ? [state.propKey] : ['']);
+  // 管理者の場合はpropKeyなしで全施設取得、清掃会社の場合は複数propKey対応
+  const isAdminMode = CONFIG.isAdmin();
+  const propKeys = isAdminMode ? [''] : (CONFIG.PROP_KEYS.length > 0 ? CONFIG.PROP_KEYS : (state.propKey ? [state.propKey] : ['']));
   state.bookingsCache = {};
   const propNames = {};
   state.properties.forEach(p => { propNames[String(p.id)] = p.name; });
