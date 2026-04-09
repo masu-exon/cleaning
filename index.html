@@ -1159,8 +1159,8 @@ async function connectApi() {
 
 async function loadLiveBookings() {
   const today = new Date();
-  const from = new Date(today); from.setMonth(from.getMonth() - 3);
-  const to = new Date(today); to.setMonth(to.getMonth() + 3);
+  const from = new Date(today); from.setMonth(from.getMonth() - 6);
+  const to = new Date(today); to.setMonth(to.getMonth() + 6);
   const fmt = d => d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
   
   // 管理者の場合は登録済みpropKeyで全施設取得、清掃会社の場合は複数propKey対応
