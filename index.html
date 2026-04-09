@@ -837,8 +837,8 @@ function renderSettingsView() {
         <td style="color:var(--text2);">${b.guest}</td>
         <td><span class="badge ${b.type}" style="font-size:10px;">${b.label}</span></td>
         <td id="chk-${b.propId}-${b.date.replace(/-/g,'')}">${done
-          ? '<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="adminToggleCheck(this,''+b.propId+'',''+b.date+'')">✓ 完了</span>'
-          : '<span style="color:var(--amber);cursor:pointer;" onclick="adminToggleCheck(this,''+b.propId+'',''+b.date+'')">待ち →完了</span>'
+          ? `<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="adminToggleCheck(this,'${b.propId}','${b.date}')">✓ 完了</span>`
+          : `<span style="color:var(--amber);cursor:pointer;" onclick="adminToggleCheck(this,'${b.propId}','${b.date}')">待ち →完了</span>`
         }</td>
         <td><input type="text" value="${(state.memos[b.propId+'_'+b.date]||'')}" placeholder="メモ" style="width:120px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);" onchange="adminUpdateMemo('${b.propId}','${b.date}',this.value)"></td>
       </tr>`;
@@ -943,8 +943,8 @@ function adminToggleCheck(el, propId, dateStr) {
   sbSet(state.companyId, 'checks', ck, state.checks[ck]);
   const done = state.checks[ck];
   if (el) el.outerHTML = done
-    ? '<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="adminToggleCheck(this,''+propId+'',''+dateStr+'')">✓ 完了</span>'
-    : '<span style="color:var(--amber);cursor:pointer;" onclick="adminToggleCheck(this,''+propId+'',''+dateStr+'')">待ち →完了</span>';
+    ? `<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="adminToggleCheck(this,'${propId}','${dateStr}')">✓ 完了</span>`
+    : `<span style="color:var(--amber);cursor:pointer;" onclick="adminToggleCheck(this,'${propId}','${dateStr}')">待ち →完了</span>`;
 }
 
 function adminUpdateMemo(propId, dateStr, val) {
