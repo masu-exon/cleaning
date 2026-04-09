@@ -915,6 +915,38 @@ function renderSettingsView() {
   </div>
   </div>`;
 
+  // 管理者用propKey管理
+  const adminPropKeys = JSON.parse(localStorage.getItem('admin_prop_keys') || '[]');
+  html += `<div class="admin-card" style="margin-bottom:24px;">
+    <h3>施設propKey管理（管理者用）</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">全施設の予約を管理画面で見るために、各施設のpropKeyを登録してください</p>`;
+
+  if (adminPropKeys.length > 0) {
+    adminPropKeys.forEach((pk, idx) => {
+      html += `<div class="company-row">
+        <div class="company-row-info">
+          <div class="company-row-name" style="font-family:monospace;font-size:12px;">${pk.key}</div>
+          <div class="company-row-url">${pk.name || ''}</div>
+        </div>
+        <div class="company-row-btns">
+          <button class="btn-sm danger" onclick="deleteAdminPropKey(${idx})">削除</button>
+        </div>
+      </div>`;
+    });
+  } else {
+    html += '<div style="font-size:13px;color:var(--text3);padding:8px 0;">propKeyが登録されていません</div>';
+  }
+
+  html += `<div class="add-company-form">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">propKeyを追加</div>
+    <div class="inline-row">
+      <input class="settings-input" type="text" id="new-propkey-name" placeholder="施設名（メモ用）" style="margin:0;">
+      <input class="settings-input" type="text" id="new-propkey-val" placeholder="propKey（16文字以上）" style="margin:0;">
+      <button class="btn-sm primary" onclick="addAdminPropKey()" style="white-space:nowrap;">追加</button>
+    </div>
+  </div>
+  </div>`;
+
   // CSVダウンロード
   const todayStr = fmtDate(TODAY);
   const monthAgo = fmtDate(new Date(TODAY.getFullYear(), TODAY.getMonth()-1, TODAY.getDate()));
@@ -934,6 +966,26 @@ function renderSettingsView() {
   document.getElementById('main-area').innerHTML = html;
 }
 
+
+function addAdminPropKey() {
+  const name = document.getElementById('new-propkey-name').value.trim();
+  const key = document.getElementById('new-propkey-val').value.trim();
+  if (!key || key.length < 16) { alert('propKeyは16文字以上必要です'); return; }
+  const keys = JSON.parse(localStorage.getItem('admin_prop_keys') || '[]');
+  keys.push({ name, key });
+  localStorage.setItem('admin_prop_keys', JSON.stringify(keys));
+  // 再接続して予約を取得
+  state.propKey = key;
+  loadLiveBookings().then(() => render());
+}
+
+function deleteAdminPropKey(idx) {
+  if (!confirm('このpropKeyを削除しますか？')) return;
+  const keys = JSON.parse(localStorage.getItem('admin_prop_keys') || '[]');
+  keys.splice(idx, 1);
+  localStorage.setItem('admin_prop_keys', JSON.stringify(keys));
+  render();
+}
 
 function adminToggleCheck(el, propId, dateStr) {
   const date = new Date(dateStr + 'T00:00:00');
@@ -1111,9 +1163,16 @@ async function loadLiveBookings() {
   const to = new Date(today); to.setMonth(to.getMonth() + 3);
   const fmt = d => d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
   
-  // 管理者の場合はpropKeyなしで全施設取得、清掃会社の場合は複数propKey対応
+  // 管理者の場合は登録済みpropKeyで全施設取得、清掃会社の場合は複数propKey対応
   const isAdminMode = CONFIG.isAdmin();
-  const propKeys = isAdminMode ? [''] : (CONFIG.PROP_KEYS.length > 0 ? CONFIG.PROP_KEYS : (state.propKey ? [state.propKey] : ['']));
+  let propKeys;
+  if (isAdminMode) {
+    const adminKeys = JSON.parse(localStorage.getItem('admin_prop_keys') || '[]');
+    propKeys = adminKeys.length > 0 ? adminKeys.map(k => k.key) : (CONFIG.PROP_KEYS.length > 0 ? CONFIG.PROP_KEYS : (state.propKey ? [state.propKey] : []));
+  } else {
+    propKeys = CONFIG.PROP_KEYS.length > 0 ? CONFIG.PROP_KEYS : (state.propKey ? [state.propKey] : []);
+  }
+  if (propKeys.length === 0) { return; }
   state.bookingsCache = {};
   const propNames = {};
   state.properties.forEach(p => { propNames[String(p.id)] = p.name; });
