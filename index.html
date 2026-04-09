@@ -1257,6 +1257,19 @@ async function autoConnect() {
 }
 
 autoConnect();
+
+// 5分ごとに自動更新
+setInterval(async () => {
+  if (!state.isLive || !state.apiKey) return;
+  try {
+    await loadLiveBookings();
+    await loadFromSupabase();
+    render();
+    console.log('自動更新完了:', new Date().toLocaleTimeString());
+  } catch(e) {
+    console.log('自動更新失敗:', e.message);
+  }
+}, 5 * 60 * 1000);
 </script>
 </body>
 </html>
